@@ -223,6 +223,12 @@ acknowledgement. (Squash merges need the TUI's `$EDITOR` gate.)
 a model (`provider/model`): `/ctree branch fix flaky test` names the branch "fix flaky test",
 `/ctree branch fix anthropic/claude-haiku-4-5` names it "fix" and runs it on that model.
 
+`/ctree status` (and every other `/ctree` subcommand) is dispatched as a turn, so it queues
+behind one already running — against a provider that never replied, it was measured sitting
+stuck at `QUEUED` rather than answering. `/tree` opens synchronously from the local journal, with
+its fork-adoption pass running off the critical path, so it is the one to reach for when a turn
+looks stalled.
+
 ## What is (and is not) touched
 
 - Branch = OpenCode session (`session.fork`). The plugin remembers `(parent, anchor)` in

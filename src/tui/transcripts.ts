@@ -4,6 +4,8 @@
  */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { StepPart, Transcript, TranscriptMessage } from "../core/transcript.js"
+import { debug } from "../shared/debug.js"
+import { sdkTimeout } from "../shared/sdk.js"
 
 type AnyMessage = { id: string; role: string; time: { created: number; completed?: number }; tokens?: TranscriptMessage["tokens"]; summary?: unknown; providerID?: string; modelID?: string }
 type AnyPart = { id: string; type: string; text?: string; tool?: string; callID?: string; state?: StepPart["state"]; time?: StepPart["time"]; metadata?: Record<string, unknown> }
@@ -52,10 +54,17 @@ export function mergeTranscripts(full: Transcript | undefined, live: Transcript)
 /** One-shot transcript of any session through the SDK. `limit` returns the *last* N and the
  *  `before` cursor is opaque (raw ids are rejected), so the whole session is fetched at once. */
 export async function fetchTranscript(api: TuiPluginApi, sessionID: string, directory: string): Promise<Transcript> {
-  const session = await api.client.session.get({ sessionID, directory }).catch(() => undefined)
+  const session = await api.client.session.get({ sessionID, directory }, { signal: sdkTimeout() }).catch(() => undefined)
   if (!session?.data) return { sessionID, title: sessionID, status: "deleted", messages: [] }
-  const res = await api.client.session.messages({ sessionID, directory })
-  const messages = ((res.data as unknown as { info: AnyMessage; parts: AnyPart[] }[] | undefined) ?? []).map((m) => toTranscriptMessage(m.info, m.parts))
+  // some callers (route.tsx's per-tick effects) await this with no try/catch of their own
+  const res = await api.client.session.messages({ sessionID, directory }, { signal: sdkTimeout() }).catch((e) => {
+    debug("fetchTranscript.messages.failed", { sessionID, error: e instanceof Error ? e.message : String(e) })
+    return undefined
+  })
+  // a timed-out fetch must not cache as an empty-but-available transcript — route.tsx only
+  // retries a still-missing ancestor while it reads "deleted"
+  if (!res) return { sessionID, title: sessionID, status: "deleted", messages: [] }
+  const messages = (res.data as unknown as { info: AnyMessage; parts: AnyPart[] }[]).map((m) => toTranscriptMessage(m.info, m.parts))
   return { sessionID, title: (session.data as { title?: string }).title ?? sessionID, status: "available", messages }
 }
 

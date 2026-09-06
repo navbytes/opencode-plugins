@@ -2,6 +2,28 @@
 
 ## 0.2.5
 
+- Every SDK call the server plugin makes, the TUI plugin's entry point (`session.list`), and the
+  transcript fetcher (`session.get`/`session.messages`) now carry a 15s timeout
+  (`AbortSignal.timeout`) instead of waiting on the server forever: if the OpenCode server itself
+  stops answering, a hook or a route now fails after 15s and falls back, rather than hanging with
+  it. (`src/tui/actions.ts` is left untimed on purpose — most of its calls are `session.prompt`,
+  which legitimately runs for a whole turn. A stalled *provider* is also a different case — the
+  server keeps answering, and a queued `/ctree` turn simply waits its turn; see the USAGE note
+  below.)
+
+- `adoptSoon` (native-fork adoption after `session.created`) now also stops retrying as soon as
+  a pass finds nothing left to adopt, not only once it adopts something — a native fork batch
+  fires two `session.created` events, and the sibling loop that lost the race to adopt both
+  forks used to poll three times a second apart for nothing.
+
+- `harness/pty-run.py` now SIGTERMs its child, drains remaining output, and SIGKILLs/waits for
+  it before exiting, instead of exiting with the child possibly still alive — a live child left
+  behind after the driver exits can spin at 100% CPU once its pty master goes away.
+
+- `docs/USAGE.md` notes that `/ctree status` (and other `/ctree` subcommands) queue behind a
+  running turn, where `/tree` opens synchronously from the local journal, its fork-adoption pass
+  running off the critical path — useful when a turn looks stuck.
+
 - **The model that answered is no longer invisible.** `TranscriptMessage` now carries the
   assistant's `providerID`/`modelID` (it was already on OpenCode's own message, just never
   copied over), so the inspector shows a `Model` line for assistant turns and steps, not only

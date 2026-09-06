@@ -5,7 +5,7 @@ Each --keys is "<delay_seconds>:<text>" (\\r for Enter, \\x1b for Esc, \\x11 for
 "@<regex>+<delay_seconds>:<text>" to wait until <regex> appears in the ANSI-stripped output, then
 <delay_seconds> more, before sending ("@!<regex>+..." matches only output produced after the previous
 key was sent). Conditional keys are processed in order after all timed keys."""
-import argparse, os, pty, select, sys, time, fcntl, termios, struct, signal
+import argparse, datetime, os, pty, select, sys, time, fcntl, termios, struct, signal
 p = argparse.ArgumentParser(); p.add_argument("--cols", type=int, default=140); p.add_argument("--rows", type=int, default=40)
 p.add_argument("--timeout", type=float, default=20); p.add_argument("--keys", action="append", default=[]); p.add_argument("--out", default="pty.out")
 p.add_argument("--exit-when-done", dest="exit_when_done", action="store_true", help="stop capturing 1s after the last key was sent")
@@ -80,6 +80,7 @@ def snapshot(label):
             render_png(os.path.join(a.png_dir, f"{len(screens):02d}-{safe}.png"))
         except Exception as e:
             sys.stderr.write(f"png render failed: {e}\n")
+stop_reason = None
 while time.time() - start < a.timeout:
     now = time.time() - start
     while ki < len(timed) and now >= timed[ki][0]:
@@ -101,14 +102,17 @@ while time.time() - start < a.timeout:
     r, _, _ = select.select([fd], [], [], 0.1)
     if r:
         try: d = os.read(fd, 65536)
-        except OSError: break
-        if not d: break
+        except OSError: stop_reason = "child exited"; break
+        if not d: stop_reason = "child exited"; break
         buf += d
         if stream is not None:
             try: stream.feed(d)
             except Exception: pass
     if ki >= len(timed) and ci >= len(cond) and a.exit_when_done:
+        stop_reason = "exit-when-done"
         break
+if stop_reason is None:
+    stop_reason = "timeout"
 if a.exit_when_done:
     # keep draining for a second so output produced after the last key lands in the capture
     end = time.time() + 1.0
@@ -122,9 +126,46 @@ if a.exit_when_done:
         if stream is not None:
             try: stream.feed(d)
             except Exception: pass
-try: os.kill(pid, signal.SIGTERM)
-except Exception: pass
-snapshot("final")
+# exiting with the child alive closes the pty master under it and can spin it at 100% CPU.
+# pty.fork makes the child a session/group leader (pgid == pid) — killpg, not kill, so a
+# grandchild that ignores SIGHUP (and so survives the child) goes down holding the pty slave too
+try: os.killpg(pid, signal.SIGTERM)
+except (ProcessLookupError, PermissionError): pass # already exited: macOS reports a dead pgid as EPERM, not ESRCH
+exit_status = None
+fd_open = True
+deadline = time.time() + 3.0
+while time.time() < deadline:
+    if fd_open:
+        r, _, _ = select.select([fd], [], [], 0.1)
+        if r:
+            try: d = os.read(fd, 65536)
+            except OSError: d = b""; fd_open = False
+            if d:
+                buf += d
+                if stream is not None:
+                    try: stream.feed(d)
+                    except Exception: pass
+            else: fd_open = False
+    else:
+        time.sleep(0.1)
+    try: wpid, exit_status = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError: wpid, exit_status = pid, None
+    if wpid == pid: break
+    exit_status = None
+if exit_status is None:
+    try: os.killpg(pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError): pass
+    try: _, exit_status = os.waitpid(pid, 0)
+    except ChildProcessError: exit_status = None
+def describe_status(status):
+    if status is None: return "unknown"
+    if os.WIFSIGNALED(status): return f"signal {os.WTERMSIG(status)}"
+    if os.WIFEXITED(status): return str(os.WEXITSTATUS(status))
+    return str(status)
+now_iso = datetime.datetime.now().astimezone().isoformat(timespec="milliseconds")
+print(f"stopped {now_iso} after {time.time() - start:.1f}s ({stop_reason}); child exit status {describe_status(exit_status)}")
+try: snapshot("final")
+except Exception as e: sys.stderr.write(f"snapshot(final) failed: {e}\n")
 open(a.out, "wb").write(buf)
 import json
 open(a.out + ".timing.json", "w").write(json.dumps(timings, indent=1))
