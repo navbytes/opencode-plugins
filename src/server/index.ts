@@ -22,7 +22,8 @@ import { debug } from "../shared/debug.js"
 import type { Transcript, TranscriptMessage } from "../core/transcript.js"
 import { cacheShare, contextSizeOf, formatK, type MinimalMessage as MinimalTokenMessage } from "../core/tokens.js"
 import { parseForkTitle } from "../core/adopt.js"
-import { adoptNativeForks } from "../shared/adopt.js"
+import { adoptNativeForks, retryAdopt } from "../shared/adopt.js"
+import { sdkTimeout } from "../shared/sdk.js"
 
 /**
  * Name the parts of an unlabelled system prompt so the consumers view can say *which* part
@@ -76,7 +77,7 @@ export const server: Plugin = async ({ worktree, client, directory }, options) =
   const mode: StorageMode = options?.["storage"] === "global" ? "global" : "local"
   // awaiting an SDK call in the plugin factory deadlocks the server (plugin init blocks
   // request handling), so the state dir is resolved off the critical path
-  const stateDir = mode === "global" ? client.path.get({ query: { directory } }).then((res) => res.data?.state).catch(() => undefined) : Promise.resolve(undefined)
+  const stateDir = mode === "global" ? client.path.get({ query: { directory }, signal: sdkTimeout() }).then((res) => res.data?.state).catch(() => undefined) : Promise.resolve(undefined)
   const journal = stateDir.then((dir) => new JournalStore({ worktree, stateDir: dir, mode }))
 
   const say = (output: { parts: any[] }, text: string) => {
@@ -86,12 +87,12 @@ export const server: Plugin = async ({ worktree, client, directory }, options) =
 
   /** Mirror tree linkage into `session.metadata.ctree` (DESIGN.md §4.2), merging with what is there. Best effort. */
   async function mirrorMetadata(sessionID: string, ctree: Record<string, unknown>): Promise<void> {
-    const existing = await client.session.get({ path: { id: sessionID }, query: { directory } }).catch(() => undefined)
+    const existing = await client.session.get({ path: { id: sessionID }, query: { directory }, signal: sdkTimeout() }).catch(() => undefined)
     const info = existing?.data as { metadata?: { ctree?: Record<string, unknown> } } | undefined
     if (!info) return // the PATCH replaces `metadata` wholesale: without the current value we would wipe other plugins' keys
     const meta = (info.metadata ?? {}) as { ctree?: Record<string, unknown> }
     await client.session
-      .update({ path: { id: sessionID }, query: { directory }, body: { metadata: { ...meta, ctree: { ...(meta.ctree ?? {}), ...ctree } } } as unknown as { title?: string } })
+      .update({ path: { id: sessionID }, query: { directory }, body: { metadata: { ...meta, ctree: { ...(meta.ctree ?? {}), ...ctree } } } as unknown as { title?: string }, signal: sdkTimeout() })
       .catch(() => undefined)
   }
 
@@ -99,14 +100,14 @@ export const server: Plugin = async ({ worktree, client, directory }, options) =
    *  to the session's own title rather than printing a raw session id (DESIGN.md §4.1). */
   async function branchLabel(sessionID: string, name?: string): Promise<string> {
     if (name) return name
-    const res = await client.session.get({ path: { id: sessionID }, query: { directory } }).catch(() => undefined)
+    const res = await client.session.get({ path: { id: sessionID }, query: { directory }, signal: sdkTimeout() }).catch(() => undefined)
     return (res?.data as { title?: string } | undefined)?.title || "branch"
   }
 
   /** One request, no paging: `before` is an opaque cursor the response never exposes, and
    *  omitting `limit` returns the whole session ascending (a `limit` would silently truncate). */
   async function transcriptOf(sessionID: string): Promise<Transcript> {
-    const res = await client.session.messages({ path: { id: sessionID }, query: { directory } })
+    const res = await client.session.messages({ path: { id: sessionID }, query: { directory }, signal: sdkTimeout() })
     if (res.error || !Array.isArray(res.data)) throw new Error(`could not read the messages of ${sessionID}: ${res.error ? JSON.stringify(res.error) : `unexpected response (${typeof res.data})`}`)
     const messages: TranscriptMessage[] = (res.data as any[]).map((m) => ({
       id: m.info.id as string,
@@ -126,19 +127,15 @@ export const server: Plugin = async ({ worktree, client, directory }, options) =
       directory,
       actor: "server",
       listSessions: async () => {
-        const res = await client.session.list({ query: { directory } })
+        const res = await client.session.list({ query: { directory }, signal: sdkTimeout() })
         return ((res.data as any[]) ?? []).map((s) => ({ id: s.id as string, title: (s.title as string) ?? "", created: (s.time?.created as number) ?? 0, parentID: s.parentID as string | undefined, directory: s.directory as string | undefined }))
       },
       messagesOf: async (sessionID) => (await transcriptOf(sessionID)).messages.map((m) => ({ id: m.id, role: m.role, created: m.time.created })),
     })
   }
 
-  /** The `session.created` event fires before the fork's messages are copied, so wait, then retry. */
   async function adoptSoon(): Promise<void> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await new Promise((r) => setTimeout(r, 1000))
-      if ((await adopt()).length > 0) return
-    }
+    await retryAdopt(adopt)
   }
 
   return {
@@ -177,17 +174,17 @@ export const server: Plugin = async ({ worktree, client, directory }, options) =
             const last = tr.messages.at(-1)
             if (!last) return say(output, "nothing to branch from yet.")
             const treeId = store.ensureTree(sessionID, "server")
-            const forked = await client.session.fork({ path: { id: sessionID }, query: { directory } })
+            const forked = await client.session.fork({ path: { id: sessionID }, query: { directory }, signal: sdkTimeout() })
             const forkedID = (forked.data as any)?.id as string | undefined
             if (!forkedID) return say(output, "fork failed.")
             store.registerSession(forkedID, treeId)
             store.record(treeId, "branch.opened", { sessionID: forkedID, parentSessionID: sessionID, anchorMessageID: last.id, name: cmd.name, kind: "explicit", branchModel: cmd.model }, "server")
             // a second branch off the same anchor must not replace the first one's label
             store.record(treeId, "label.set", { sessionID, messageID: last.id, label: withBranchLabel(store.stateFor(treeId).labels[last.id]?.label, cmd.name) }, "server")
-            await client.session.update({ path: { id: forkedID }, query: { directory }, body: { title: `⎇ ${cmd.name}` } }).catch(() => undefined)
+            await client.session.update({ path: { id: forkedID }, query: { directory }, body: { title: `⎇ ${cmd.name}` }, signal: sdkTimeout() }).catch(() => undefined)
             await mirrorMetadata(forkedID, { treeId, parentSessionID: sessionID, anchorMessageID: last.id, name: cmd.name, status: "open" })
             await mirrorMetadata(sessionID, { treeId })
-            await client.tui.publish({ query: { directory }, body: { type: "tui.session.select", properties: { sessionID: forkedID } } as any }).catch(() => undefined)
+            await client.tui.publish({ query: { directory }, body: { type: "tui.session.select", properties: { sessionID: forkedID } } as any, signal: sdkTimeout() }).catch(() => undefined)
             return say(output, `⎇ ${cmd.name} opened as session ${forkedID}${cmd.model ? ` on ${cmd.model}` : ""}. Switch to it with /sessions if the TUI did not follow.`)
           }
           case "merge-discard": {
@@ -196,7 +193,7 @@ export const server: Plugin = async ({ worktree, client, directory }, options) =
             if (!state || !branch || branch.status !== "open") return say(output, "this session is not an open branch — /ctree branch first.")
             store.record(state.treeId, "branch.closed", { sessionID, status: "rejected", note: cmd.note }, "server")
             await mirrorMetadata(sessionID, { status: "rejected" })
-            await client.tui.publish({ query: { directory }, body: { type: "tui.session.select", properties: { sessionID: branch.parentSessionID } } as any }).catch(() => undefined)
+            await client.tui.publish({ query: { directory }, body: { type: "tui.session.select", properties: { sessionID: branch.parentSessionID } } as any, signal: sdkTimeout() }).catch(() => undefined)
             return say(output, `⎇ ${await branchLabel(sessionID, branch.name)} discarded${cmd.note ? ` (${cmd.note})` : ""} — back on the trunk (${branch.parentSessionID}); /ctree undo from there re-opens it.`)
           }
           case "crop-top":
@@ -230,7 +227,7 @@ export const server: Plugin = async ({ worktree, client, directory }, options) =
             }
             if (plan.kind === "abandon-branch") {
               store.record(state.treeId, "branch.closed", { sessionID: plan.sessionID, status: "abandoned" }, "server")
-              await client.tui.publish({ query: { directory }, body: { type: "tui.session.select", properties: { sessionID: plan.parentSessionID } } as any }).catch(() => undefined)
+              await client.tui.publish({ query: { directory }, body: { type: "tui.session.select", properties: { sessionID: plan.parentSessionID } } as any, signal: sdkTimeout() }).catch(() => undefined)
               return say(output, `left ⎇ ${await branchLabel(plan.sessionID, plan.name)}; parent session is ${plan.parentSessionID}.`)
             }
             if (plan.kind === "reopen-branch") {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { expectedParentTitle, findForkParent, parseForkTitle, pickAdoptables, type ForkCandidate, type ForkMessage, type SessionInfo } from "../src/core/adopt.js"
+import { retryAdopt, type Adopted } from "../src/shared/adopt.js"
 
 function messages(prefix: string, roles: ("user" | "assistant")[], from = 1000): ForkMessage[] {
   return roles.map((role, i) => ({ id: `${prefix}_${i}`, role, created: from + i }))
@@ -133,5 +134,52 @@ describe("pickAdoptables", () => {
 
   test("a renamed fork — even the session you are in — is not adopted blindly", () => {
     expect(pickAdoptables(sessions, new Set()).map((s) => s.id)).not.toContain("s_current")
+  })
+})
+
+describe("retryAdopt", () => {
+  test("stops after the first pass that adopts something", async () => {
+    const found: Adopted[] = [{ sessionID: "s_fork", parentSessionID: "s_parent" }]
+    let calls = 0
+    const adopt = async () => {
+      calls++
+      return calls === 1 ? { adopted: [], adoptables: 1 } : { adopted: found, adoptables: 1 }
+    }
+    const result = await retryAdopt(adopt, 3, 0)
+    expect(result).toEqual(found)
+    expect(calls).toBe(2) // the 3rd try never runs — it would be a zero-call poll
+  })
+
+  test("polls all tries when candidates never match a parent", async () => {
+    let calls = 0
+    const adopt = async () => {
+      calls++
+      return { adopted: [], adoptables: 1 } // a fork candidate exists each pass but never matches
+    }
+    const result = await retryAdopt(adopt, 3, 0)
+    expect(result).toEqual([])
+    expect(calls).toBe(3)
+  })
+
+  test("stops after a pass that finds nothing adoptable", async () => {
+    let calls = 0
+    const adopt = async () => {
+      calls++
+      return { adopted: [], adoptables: 0 }
+    }
+    const result = await retryAdopt(adopt, 3, 0)
+    expect(result).toEqual([])
+    expect(calls).toBe(1)
+  })
+
+  test("keeps retrying after a pass that failed (adoptables: -1, unknown)", async () => {
+    let calls = 0
+    const adopt = async () => {
+      calls++
+      return { adopted: [], adoptables: -1 }
+    }
+    const result = await retryAdopt(adopt, 3, 0)
+    expect(result).toEqual([])
+    expect(calls).toBe(3)
   })
 })

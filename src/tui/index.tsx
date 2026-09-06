@@ -13,7 +13,8 @@ import { openSiblings } from "../core/decision.js"
 import { hasEditor } from "./editor.js"
 import { TreeRoute } from "./route.js"
 import { parseForkTitle } from "../core/adopt.js"
-import { adoptNativeForks } from "../shared/adopt.js"
+import { adoptNativeForks, retryAdopt } from "../shared/adopt.js"
+import { sdkTimeout } from "../shared/sdk.js"
 import { fetchTranscript, modelContextLimit } from "./transcripts.js"
 import { ContextGauge } from "./gauge.js"
 
@@ -83,7 +84,7 @@ const tui: TuiPlugin = async (api, rawOptions) => {
       directory,
       actor: "tui",
       listSessions: async () => {
-        const res = await api.client.session.list({ directory })
+        const res = await api.client.session.list({ directory }, { signal: sdkTimeout() })
         return ((res.data as any[]) ?? []).map((s) => ({ id: s.id as string, title: (s.title as string) ?? "", created: (s.time?.created as number) ?? 0, parentID: s.parentID as string | undefined, directory: s.directory as string | undefined }))
       },
       messagesOf: async (sessionID) => (await fetchTranscript(api, sessionID, directory)).messages.map((m) => ({ id: m.id, role: m.role, created: m.time.created })),
@@ -94,13 +95,7 @@ const tui: TuiPlugin = async (api, rawOptions) => {
     return found
   }
 
-  /** The `session.created` event fires before the fork's messages are copied, so wait, then retry. */
-  const adoptSoon = async () => {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await new Promise((r) => setTimeout(r, 1000))
-      if ((await adopt()).length > 0) return
-    }
-  }
+  const adoptSoon = () => retryAdopt(adopt)
 
   const offCreated = api.event.on("session.created", (event) => {
     const info = event.properties.info
