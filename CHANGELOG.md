@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.5
+## 0.2.6 — 2026-09-07
 
 - Every SDK call the server plugin makes, the TUI plugin's entry point (`session.list`), and the
   transcript fetcher (`session.get`/`session.messages`) now carry a 15s timeout
@@ -23,6 +23,8 @@
 - `docs/USAGE.md` notes that `/ctree status` (and other `/ctree` subcommands) queue behind a
   running turn, where `/tree` opens synchronously from the local journal, its fork-adoption pass
   running off the critical path — useful when a turn looks stuck.
+
+## 0.2.5 — 2026-09-04
 
 - **The model that answered is no longer invisible.** `TranscriptMessage` now carries the
   assistant's `providerID`/`modelID` (it was already on OpenCode's own message, just never
