@@ -267,7 +267,7 @@ export function TreeRoute(props: TreeRouteProps) {
   // "calls" was a third mode until it became the `tools-only` row filter; old kv still holds it
   const [laneMode, setLaneMode] = createSignal<LaneMode>(api.kv.get<LaneMode>("ctree.lanes", "turns") === "duration" ? "duration" : "turns")
   // DSH lanes and inspector are first-class but off by default, so the first screen reads as
-  // Pi's clean outline (header + tree + footer); `1/2/3` and `i` bring them in, one keystroke.
+  // Pi's clean outline (header + tree + footer); `1`/`2` and `i` bring them in, one keystroke.
   const [lanesOn, setLanesOn] = createSignal<boolean>(api.kv.get<boolean>("ctree.lanesOn", false))
   /** Full-screen inspector (`shift+i`), and the only inspector below 110 columns where the
    *  side pane does not fit — DESIGN.md §7.1's promised `pi-context-tree` inspect view. */
@@ -674,7 +674,7 @@ export function TreeRoute(props: TreeRouteProps) {
   // under three turns every lane is one or two pills, which reads as a glitch rather than a strip
   const laneRoom = () => height() >= 12 && panel() === "tree"
   const showLanes = () => laneRoom() && lanesOn() && userTurns() >= 3
-  /** `1/2/3` turn the DSH lanes on and pick the x-axis; the active one again (or `0`) hides them. */
+  /** `1`/`2` turn the DSH lanes on and pick the x-axis; the active one again (or `0`) hides them. */
   function setLane(mode: LaneMode) {
     if (lanesOn() && laneMode() === mode) {
       setLanesOn(false)
