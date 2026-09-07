@@ -150,7 +150,7 @@ Palette: **Context tree**, **Branch here**, **Merge branch**, **Decisions**, **L
   `○ assistant:`) and tool step (`⚙ [bash $ …]` / `[tool: arg] → out`). From anywhere you see the
   whole tree — your branch open with `← here`, the rest folded to their `⎇` header (`→` opens one).
 - The Input/Model/Tools lanes and the right-hand inspector (DeepSeek-Harness trajectory) are OFF by
-  default so the first screen is the clean outline; `1/2/3` bring in the lanes, `i` the inspector.
+  default so the first screen is the clean outline; `1`/`2` bring in the lanes, `i` the inspector.
   On an assistant step the inspector also breaks its tokens down: `Prompt 2.3k fresh · 40.4k cached`
   and `Reply 0.5k out · 0.2k thinking`.
   The lanes are an event strip — one `▬` pill per prompt / model step / tool call on a shared time

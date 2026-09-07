@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.7 — 2026-09-07
+
+Documentation only — no behaviour changed. This release exists to get the rewritten README
+onto the npm page, which renders the copy shipped in the tarball and so still showed the
+pre-0.2.0 one.
+
+- **The README is reorganised** around a hero screenshot, a "Why" that states the problem
+  before the feature list, a table of contents, and one section per job. Its keys are a table
+  rather than a paragraph, and it gains a Configuration table (`storage`, `jumpSummary`,
+  `hardCrop`, `keybinds` were link-only), a Troubleshooting section for the failures that are
+  easy to hit (the TUI half unregistered, mismatched `storage` between the two halves, a
+  queued `/ctree` turn, a cached upgrade), and a Development section with the test commands.
+
+- **Fixed: the README claimed "Status: 0.1.0 — first release"** while npm served 0.2.6. The
+  version is now an npm badge that cannot go stale, and the upgrade example takes a
+  `<version>` placeholder rather than pinning whichever release was current when it was
+  written.
+
+- **Fixed: the lanes were documented as `1`, `2` or `3` for "the Input/Model/Tools
+  timeline"** — in the README and in the `1/2/3` comment at `src/tui/route.tsx#setLane`.
+  `DEFAULT_KEYS` binds only `mode_duration` (`1`), `mode_turns` (`2`) and `lanes_off` (`0`):
+  all three lanes are always drawn, and `1`/`2` pick the x-axis. The docs and the comment now
+  say what the keymap does.
+
 ## 0.2.6 — 2026-09-07
 
 - Every SDK call the server plugin makes, the TUI plugin's entry point (`session.list`), and the

@@ -92,10 +92,10 @@ OpenCode caches the version it installed and does not re-resolve `@latest` on re
 Pin the new release, which also rewrites both config entries:
 
 ```sh
-opencode plugin opencode-context-tree@0.2.6 -g --force   # drop -g for this project only
+opencode plugin opencode-context-tree@<version> -g --force   # drop -g for this project only
 ```
 
-Or delete `~/.cache/opencode/packages/opencode-context-tree@latest` and restart.
+The npm badge at the top of this page is the current version. Or delete `~/.cache/opencode/packages/opencode-context-tree@latest` and restart.
 `?` inside `/tree` and `/ctree status` both print the version you are running.
 
 </details>
