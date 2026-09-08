@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **`{` and `}` move by turn.** The outline's unit is the `●` turn, but until now nothing
+  moved by it: `j`/`k` walked rows one tool call at a time and `J`/`K` jumped a blind 20. The
+  new motions land on the previous/next turn row, and from a step row `{` lands on the turn
+  that owns it before moving on — the way `{` in vim leaves the paragraph you are inside. With
+  the lanes on they double as a timeline scrubber, since the event strip already draws its
+  rules at turn boundaries. Overridable like every other key (`keybinds: { next_turn: … }`).
+
 - **The flows that wait on a model now say so while they wait.** Drafting a branch summary
   (`⏎` → *Summarize…*) or a ◆ decision record (`/merge` → *Squash*) takes a model call, and
   until now the tree simply sat there until the result appeared. The status line now carries a

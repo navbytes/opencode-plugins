@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { cycleFilter, firstIndex, lastIndex, moveSelection, nextBranchIndex, paneWindow, resolveSelection, scrollPane, toggleExpanded } from "../src/core/navigation.js"
+import { cycleFilter, firstIndex, lastIndex, moveSelection, nextBranchIndex, nextTurnIndex, paneWindow, resolveSelection, scrollPane, toggleExpanded } from "../src/core/navigation.js"
 import { buildTreeView } from "../src/core/tree.js"
 import { buildFixture, OPEN, TRUNK } from "./fixtures/tree.js"
 
@@ -19,6 +19,23 @@ describe("navigation", () => {
     expect(second).toBe(first + 1)
     expect(nextBranchIndex(view.rows, second, 1)).toBe(second)
     expect(nextBranchIndex(view.rows, 0, -1)).toBe(0)
+  })
+  test("nextTurnIndex walks the ● rows and stays put at the ends", () => {
+    const turns = view.rows.flatMap((r, i) => (r.kind === "turn" ? [i] : []))
+    expect(turns.length).toBeGreaterThan(1)
+    expect(nextTurnIndex(view.rows, turns[0]!, 1)).toBe(turns[1]!)
+    expect(nextTurnIndex(view.rows, turns[1]!, -1)).toBe(turns[0]!)
+    expect(nextTurnIndex(view.rows, turns.at(-1)!, 1)).toBe(turns.at(-1)!)
+    expect(nextTurnIndex(view.rows, turns[0]!, -1)).toBe(turns[0]!)
+    expect(nextTurnIndex([], 0, 1)).toBe(0)
+  })
+  test("from a step row, going back lands on the turn that owns it", () => {
+    const step = view.rows.findIndex((r) => r.kind === "step")
+    expect(step).toBeGreaterThan(0)
+    const owner = nextTurnIndex(view.rows, step, -1)
+    expect(view.rows[owner]!.kind).toBe("turn")
+    // the step's own turn, not the one above it: nothing selectable lies between them
+    expect(view.rows.slice(owner + 1, step).every((r) => r.kind !== "turn")).toBe(true)
   })
   test("toggleExpanded returns a new set", () => {
     const a = new Set<string>()

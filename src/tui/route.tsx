@@ -8,7 +8,7 @@ import { PLUGIN_VERSION } from "../shared/version.js"
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { abandonedTail, planJump, type AbandonedTail, type JumpPlan } from "../core/actions.js"
 import { foldJournal, type TreeState } from "../core/journal.js"
-import { firstIndex, lastIndex, moveSelection, nextBranchIndex, paneWindow, resolveSelection, scrollPane, toggleExpanded } from "../core/navigation.js"
+import { firstIndex, lastIndex, moveSelection, nextBranchIndex, nextTurnIndex, paneWindow, resolveSelection, scrollPane, toggleExpanded } from "../core/navigation.js"
 import { contextSizeOf, formatContext, formatK, type MinimalMessage } from "../core/tokens.js"
 import { buildSpineMap, buildTreeView, currentChainOf, formatPromptAt, promptAtRow, type Filter, type Row, type StepRow, type TurnRow } from "../core/tree.js"
 import { ContextGauge } from "./gauge.js"
@@ -157,6 +157,8 @@ const DEFAULT_KEYS: Record<string, string[]> = {
   last: ["shift+g"],
   prev_branch: ["["],
   next_branch: ["]"],
+  prev_turn: ["{"],
+  next_turn: ["}"],
   fold: ["left", "h"],
   unfold: ["right", "l"],
   toggle: ["tab", "e"],
@@ -204,7 +206,8 @@ const NO_BRANCHES = "No branches yet · b forks here into a real OpenCode sessio
 const HELP = [
   `? help · ? or esc closes · opencode-context-tree ${PLUGIN_VERSION}`,
   "Move",
-  "  ↑↓ j k · J K by 20 · ctrl+d ctrl+u half page · gg top · G bottom · [ ] branch rows",
+  "  ↑↓ j k · J K by 20 · ctrl+d ctrl+u half page · gg top · G bottom",
+  "  { } turn rows (the lanes scrub with them) · [ ] branch rows",
   "  h l ← → fold/unfold a branch · Tab (or e) toggle · / live search · n N next/prev match",
   "Act",
   "  ⏎ go — a ⎇ header switches to it · a user turn forks & prefills it · a step forks after it",
@@ -1376,6 +1379,8 @@ export function TreeRoute(props: TreeRouteProps) {
       { name: "ctree.last", hidden: true, run: () => gotoEdge(1) },
       { name: "ctree.prev_branch", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextBranchIndex(view().rows, i, -1)) },
       { name: "ctree.next_branch", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextBranchIndex(view().rows, i, 1)) },
+      { name: "ctree.prev_turn", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextTurnIndex(view().rows, i, -1)) },
+      { name: "ctree.next_turn", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextTurnIndex(view().rows, i, 1)) },
       { name: "ctree.fold", hidden: true, enabled: listPanel, run: () => (panel() === "consumers" ? toggleConsumer(false) : foldOrUnfold(false)) },
       { name: "ctree.unfold", hidden: true, enabled: listPanel, run: () => (panel() === "consumers" ? toggleConsumer(true) : foldOrUnfold(true)) },
       { name: "ctree.toggle", hidden: true, enabled: treePanel, run: () => foldOrUnfold(!(current()?.kind === "branch" && (current() as Row & { kind: "branch" }).expanded)) },

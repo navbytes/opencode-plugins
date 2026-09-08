@@ -117,6 +117,7 @@ appended to the trunk as a normal message.*
 | key | action |
 |---|---|
 | `↑↓` `j k` · `J K` (20) · `ctrl+d` `ctrl+u` · `gg` `G` | move · half page · top / bottom |
+| `{` `}` | previous / next `●` turn row. From a step, `{` lands on the turn that owns it first — the way `{` leaves the paragraph you are inside — so it doubles as "top of this turn". With the lanes on, the two keys scrub the timeline turn by turn, because the strip already rules its boundaries there |
 | `[` `]` | previous / next branch row |
 | `← →` `h l` · `Tab` (or `e`) | fold / unfold a branch inline |
 | `⏎` | go here — the footer names what it will do for the row you are on: switch to a `⎇` branch, fork & prefill a user turn, fork after a step. Opens Pi's one question (below), which is also the confirmation; `u` undoes it |
