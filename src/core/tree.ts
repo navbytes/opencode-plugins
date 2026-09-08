@@ -18,6 +18,7 @@
  * Pure, no OpenCode/opentui/solid-js imports — see test/core-purity.test.ts.
  */
 import type { BranchState, TreeState } from "./journal.js"
+import type { FoldSummary } from "./fold.js"
 import { estimateTokens, formatK } from "./tokens.js"
 import { messagePreview, partPreview, stepKind, type StepPart, type Transcript, type TranscriptMessage } from "./transcript.js"
 
@@ -43,6 +44,10 @@ export type TurnRow = {
   /** false for rows the current session never sends: an ancestor's rows past the point where
    *  this path forked away, and every other branch's rows (DESIGN.md §7.1). */
   inContext: boolean
+  /** Set by `core/fold.ts` when this turn's steps are collapsed into it: the row then carries
+   *  their tokens and `fold` says what it swallowed. Never set by the emitter. */
+  folded?: boolean
+  fold?: FoldSummary
 }
 
 export type StepRow = {

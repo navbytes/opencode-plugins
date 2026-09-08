@@ -17,6 +17,7 @@ import type { JournalStore } from "../shared/store.js"
 import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyText, createNamedBranch, executeJump, executeUndo, jumpDialogOptions, jumpDialogTitle, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, MERGE_TRUST, setLabel, UNDO_KEY, type ActionContext, type MergeMode, type SummaryChoice } from "./actions.js"
 import { decisionSummary, exportDecisions, renderDecision } from "../core/decision.js"
 import { formatProgress, SPINNER_MS, type ProgressState } from "../core/progress.js"
+import { applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, setManualFold, DEFAULT_OPEN_TURNS, type FoldPolicy } from "../core/fold.js"
 import { laneLabel, laneSuffix, layoutEventStrip, overviewTrack, stripIndexFor, windowFor, LANE_CHROME, type LaneMode, type StripCell } from "../core/lanes.js"
 import { bar, consumers, type Consumer, type ConsumerEntry } from "../core/consumers.js"
 import { hasEditor } from "./editor.js"
@@ -109,9 +110,7 @@ function rowLine(row: Row, width: number, here: boolean): string {
     const flags =
       row.kind === "step"
         ? `${row.label ? ` [${row.label}]` : ""}${row.isCropped ? " ✂" : ""}${row.warn ? " ⚠" : ""}${row.isError ? " ✗" : ""}`
-        : row.label
-          ? ` [${row.label}]`
-          : ""
+        : `${row.label ? ` [${row.label}]` : ""}${isFolded(row) ? `   ${foldDigest(row.fold, formatK)}` : ""}`
     const dur = row.kind === "step" && row.durationMs !== undefined ? ` ${(row.durationMs / 1000).toFixed(row.durationMs < 10_000 ? 1 : 0)}s` : ""
     body = `${row.gutter}${glyphOf(row)} ${textOf(row)}${flags}${dur}${thoughtOf(row)}${marker}`
   }
@@ -164,6 +163,17 @@ const DEFAULT_KEYS: Record<string, string[]> = {
   next_turn: ["}"],
   fold: ["left", "h"],
   unfold: ["right", "l"],
+  // vim's fold vocabulary, on turns: the tree already had folds, it just had no verbs
+  fold_toggle: ["za"],
+  fold_open: ["zo"],
+  fold_close: ["zc"],
+  // vim spells "all folds" zR/zM, but this host's binding parser does not match a shifted
+  // second stroke (verified in the TUI e2e), and with a single fold level vim's own zr/zm
+  // — one level less/more folding — mean exactly the same thing here
+  fold_open_all: ["zr"],
+  fold_close_all: ["zm"],
+  next_fold: ["zj"],
+  prev_fold: ["zk"],
   toggle: ["tab", "e"],
   go: ["return"],
   branch: ["b"],
@@ -212,6 +222,7 @@ const HELP = [
   "  ↑↓ j k · J K by 20 · ctrl+f ctrl+b page · ctrl+d ctrl+u half page · gg top · G bottom",
   "  { } turn rows (the lanes scrub with them) · [[ ]] (or [ ]) branch rows",
   "  h l ← → fold/unfold a branch · Tab (or e) toggle · / live search · n N next/prev match",
+  "  za fold this turn · zo zc open/close · zr all open · zm all folded · zj zk between folds",
   "Act",
   "  ⏎ go — a ⎇ header switches to it · a user turn forks & prefills it · a step forks after it",
   "     then: no summary · summarize everything below that point · summarize with your own prompt (esc stays put)",
@@ -278,6 +289,11 @@ export function TreeRoute(props: TreeRouteProps) {
    *  jump — nothing has been forked or switched yet (Pi's `abortBranchSummary`). */
   const [summaryAbort, setSummaryAbort] = createSignal<AbortController | undefined>()
   const [cropMode, setCropMode] = createSignal<"result" | "turn" | undefined>()
+  /** Fold posture for turns nobody has touched (`zR` opens all, `zM` closes all), and the
+   *  hand-folds that override it. Route state on purpose: your folds hold while the tree is
+   *  open and every visit starts from the same clean outline (DESIGN.md §7.5). */
+  const [foldBase, setFoldBase] = createSignal<FoldPolicy["base"]>("auto")
+  const [manualFolds, setManualFolds] = createSignal<ReadonlyMap<string, boolean>>(new Map())
   const [panel, setPanel] = createSignal<"tree" | "decisions" | "consumers" | "help">(props.initialView ?? "tree")
   // "calls" was a third mode until it became the `tools-only` row filter; old kv still holds it
   const [laneMode, setLaneMode] = createSignal<LaneMode>(api.kv.get<LaneMode>("ctree.lanes", "turns") === "duration" ? "duration" : "turns")
@@ -390,7 +406,8 @@ export function TreeRoute(props: TreeRouteProps) {
   const transcripts = createMemo(() => (sessionID ? { ...others(), [sessionID]: live()! } : {}))
   const spine = createMemo(() => buildSpineMap({ state: state(), transcripts: transcripts(), currentSessionID: sessionID ?? "" }))
 
-  const view = createMemo(() => {
+  /** The rows the filter produced, before folding — `view` below collapses turns on top. */
+  const unfolded = createMemo(() => {
     if (!sessionID) return { rows: [] as Row[], indexById: {}, currentRowId: undefined, totalTokens: 0, totalEstimated: false }
     const st = state()
     const labels: Record<string, string> = {}
@@ -417,6 +434,26 @@ export function TreeRoute(props: TreeRouteProps) {
       labels,
       crops,
     })
+  })
+
+  /**
+   * What is folded right now. Crop mode and an active search both force everything open:
+   * crop marks live on the step rows, and a search that hid its own matches would read as
+   * broken. Otherwise the stored posture applies, with hand-folds on top.
+   */
+  const foldPolicy = createMemo<FoldPolicy>(() => ({
+    base: cropMode() || search() ? "none" : foldBase(),
+    openTurns: DEFAULT_OPEN_TURNS,
+    manual: cropMode() || search() ? new Map() : manualFolds(),
+  }))
+
+  const view = createMemo(() => {
+    const built = unfolded()
+    const rows = applyFolds(built.rows, foldPolicy())
+    if (rows === built.rows) return built
+    const indexById: Record<string, number> = {}
+    rows.forEach((r, i) => (indexById[r.id] = i))
+    return { ...built, rows, indexById }
   })
 
   // Keep the cursor sensible when the list is rebuilt.
@@ -640,7 +677,17 @@ export function TreeRoute(props: TreeRouteProps) {
     const pid = row.kind === "step" ? (currentPartOf(row) ?? row.partID) : undefined
     const own = stripIndexFor(layout(), mid, pid)
     if (own >= 0) hit.add(own)
+    // A folded turn stands for everything it swallowed, so it lights that whole span across
+    // the three lanes: the strip keeps every event a fold hides, and this is where you see
+    // how much one collapsed row is standing in for — errors included, as red pills.
+    const swallowed = isFolded(row)
+      ? new Set(row.fold.messageIDs.map((id) => (row.sessionID === sessionID ? id : (spine().toCurrent(row.sessionID, id) ?? id))))
+      : undefined
     layout().events.forEach((e, i) => {
+      if (swallowed?.has(e.messageID)) {
+        hit.add(i)
+        return
+      }
       if (e.messageID !== mid) return
       if (row.kind === "turn" ? e.lane === "input" : e.kind === "reasoning") hit.add(i)
     })
@@ -1183,6 +1230,45 @@ export function TreeRoute(props: TreeRouteProps) {
     bump()
   }
 
+  /**
+   * `za` / `zo` / `zc` on the turn the cursor is in (a step row folds the turn that owns it,
+   * and the cursor rides up to it — the row it was on is about to stop existing).
+   */
+  function foldTurn(how: "toggle" | "open" | "close") {
+    const rows = view().rows
+    const owner = ownerTurnIndex(rows, selected())
+    if (owner < 0) return
+    const row = rows[owner]!
+    if (row.kind !== "turn") return
+    const folded = how === "toggle" ? !isFolded(row) : how === "close"
+    // a turn with nothing under it has nothing to fold; say so rather than drawing a ▸ that
+    // opens onto nothing
+    if (folded && !isFolded(row) && ownerCount(rows, owner) === 0) {
+      notify("nothing to fold on this turn")
+      return
+    }
+    setManualFolds((m) => setManualFold(m, row.messageID, folded))
+    setSelected(owner)
+  }
+
+  /** Step rows currently drawn under the turn at `index`. */
+  function ownerCount(rows: Row[], index: number): number {
+    let n = 0
+    for (let i = index + 1; i < rows.length; i++) {
+      if (rows[i]!.kind !== "step") break
+      n++
+    }
+    return n
+  }
+
+  /** `zR` / `zM`: the posture for every turn nobody has touched, and the hand-folds go with it
+   *  — otherwise "open everything" would leave your own closed turns shut. */
+  function foldAll(base: FoldPolicy["base"]) {
+    setFoldBase(base)
+    setManualFolds(new Map())
+    notify(base === "all" ? "all turns folded — zR opens them" : "all turns open — zM folds them")
+  }
+
   function foldOrUnfold(open: boolean) {
     const row = current()
     if (!row) return
@@ -1392,6 +1478,13 @@ export function TreeRoute(props: TreeRouteProps) {
       { name: "ctree.last", hidden: true, run: () => gotoEdge(1) },
       { name: "ctree.prev_branch", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextBranchIndex(view().rows, i, -1)) },
       { name: "ctree.next_branch", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextBranchIndex(view().rows, i, 1)) },
+      { name: "ctree.fold_toggle", hidden: true, enabled: treeIdle, run: () => foldTurn("toggle") },
+      { name: "ctree.fold_open", hidden: true, enabled: treeIdle, run: () => foldTurn("open") },
+      { name: "ctree.fold_close", hidden: true, enabled: treeIdle, run: () => foldTurn("close") },
+      { name: "ctree.fold_open_all", hidden: true, enabled: treeIdle, run: () => foldAll("none") },
+      { name: "ctree.fold_close_all", hidden: true, enabled: treeIdle, run: () => foldAll("all") },
+      { name: "ctree.next_fold", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextFoldIndex(view().rows, i, 1)) },
+      { name: "ctree.prev_fold", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextFoldIndex(view().rows, i, -1)) },
       { name: "ctree.prev_turn", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextTurnIndex(view().rows, i, -1)) },
       { name: "ctree.next_turn", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextTurnIndex(view().rows, i, 1)) },
       { name: "ctree.fold", hidden: true, enabled: listPanel, run: () => (panel() === "consumers" ? toggleConsumer(false) : foldOrUnfold(false)) },

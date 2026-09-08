@@ -119,6 +119,18 @@ one question with Pi's three answers — fork clean, summarize everything below 
 or summarize it with your own prompt — and the answer is also the confirmation. The
 summary covers exactly the turns the move leaves behind.
 
+Turns older than the last three fold to one row each, so the outline reads as an outline
+rather than a wall of tool calls:
+
+```
+● T5 add a retry to the flaky test        ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠
+```
+
+`za` folds or opens the turn you are on, `zm` folds them all, `zr` opens them all — vim's own
+fold keys. Nothing is lost: the digest counts what is inside, the timeline still shows every
+event (a folded turn lights the whole span it stands for), and crop mode opens everything
+while you pick targets.
+
 Drafting one takes a model call, so the status line shows it happening —
 `⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s · esc cancels`: the step, the
 draft as it streams in, how long it has been, and the way out. The `◆` record a `/merge`
@@ -210,6 +222,8 @@ Vim-aligned, inside `/tree`. Press `?` for the full list without leaving the scr
 | `{` `}` | previous / next turn row — the outline's own unit; the lanes scrub with it |
 | `[[` `]]` (or `[` `]`) | previous / next branch row |
 | `h` `l` · `Tab` | fold / unfold a branch inline |
+| `za` · `zo` `zc` | fold / open / close the turn you are on |
+| `zr` `zm` · `zj` `zk` | open every fold / fold every turn · move between folds |
 | `⏎` | go here — the footer names what it will do for this row |
 | `b` | branch here, naming it and optionally picking a model |
 | `m` | merge: squash, squash without the model, discard, or tournament |

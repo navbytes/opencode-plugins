@@ -723,6 +723,38 @@ labeled shows only `L`-labelled rows). `/` filters rows incrementally by role, t
 name, label, and text — every token must match, like Pi. Folding state resets on
 filter change (as in Pi) and is otherwise remembered per session in `api.kv`.
 
+**Turn folds (`core/fold.ts`).** A turn whose model ran six tools costs seven rows and one of
+them is the skeleton you were skimming, so a turn collapses into its `●` row carrying what it
+swallowed: `● T7 add a retry to the flaky test   ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠`. Nothing escapes
+a fold — the digest is the whole story of what is inside it.
+
+*Posture.* `auto` (the default) keeps the **last 3 turns of the path you are on** open, so the
+far scrollback compresses while the end you are working at stays in detail; `zm` folds every
+turn, `zr` opens every one. Hand-folds (`za`, `zo`, `zc`) win over the posture and live in the
+route, not in `api.kv`: your folds hold while the tree is open and every visit starts from the
+same clean outline. Crop mode and an active search force everything open — crop marks live on
+the step rows, and a search that hid its own matches would read as broken.
+
+*Why a post-pass, not a branch in the emitter.* `buildTreeView` decides what *exists* (the
+`Filter`); folding decides what is *drawn now*. Keeping them apart is what lets the event strip
+stay complete while the rows collapse: `layoutEventStrip` is fed the transcript and the filter,
+never these rows, so the `Filter` remains the only "which events" control (§7.3) and the fold
+cannot gut the timeline it is supposed to complement. A folded turn's tokens roll into its row,
+so the column still totals; its digest counts what the *current filter* would have shown, so
+rows, digest and strip tell one story.
+
+*On the strip.* Selecting a folded turn lights every event it swallowed, across all three
+lanes — one collapsed row here, that span of pills there, its errors still red. That is what
+makes "nothing escapes the fold" safe: the row list stays clean, the timeline keeps the
+evidence.
+
+*Keys.* vim's fold vocabulary, since vim already has one: `za` toggle, `zo`/`zc` open/close,
+`zj`/`zk` between folds, and `zr`/`zm` for all-open/all-folded. vim spells the last pair
+`zR`/`zM`, but OpenCode's binding parser does not match a shifted second stroke (verified
+against the real TUI in `test/e2e/tui.test.ts`), and with a single fold level vim's own
+`zr`/`zm` — one level less/more folding — mean exactly the same thing here. `h`/`l`/`Tab`
+stay branch folds.
+
 **Lane width (0.2.4).** The strip is `width() + 2 - LANE_CHROME`: the terminal, minus the
 12-column lane label and the mode legend, plus the two columns a row spends on its `│ ` prefix
 *outside* its own width (a lane label carries its own), so all three lane rows end on the same

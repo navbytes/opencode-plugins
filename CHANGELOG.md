@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **Turns fold.** A turn whose model ran six tools was seven rows in the outline, one of which
+  was the `●` you were actually skimming for. Turns older than the last three on your path now
+  open folded, carrying what they hold — `● T5 add a retry to the flaky test   ▸ 6 steps ·
+  ~12k · 1 ✗ · 2 ⚠` — and nothing escapes the fold: the digest is the whole story of what is
+  inside it (steps, their tokens, and how many were errors, ≥10k or already cropped).
+
+  Folding uses vim's own fold keys: `za` toggles the turn the cursor is in (from a step row,
+  the turn that owns it, and the cursor rides up to it), `zo`/`zc` open and close, `zj`/`zk`
+  move between folds, and `zr`/`zm` open every fold / fold every turn. `zm` is the pure
+  outline — one row per turn. Hand-folds beat the last-three rule and last while the tree is
+  open, so every visit starts from the same clean outline; `h`/`l`/`Tab` still fold branches.
+
+  Two things stay out of the fold's way. **Crop mode opens everything** (marks live on the step
+  rows) and restores your folds on the way out, as does a live `/` search — a search that hid
+  its own matches would read as broken. And **the timeline keeps every event**: folding thins
+  the rows, never the lanes, so the `Filter` remains the only "which events" control and a
+  folded turn lights the whole span it stands for when you select it, errors still red. Fold
+  the rows, read the shape on the strip.
+
 - **The keymap is being aligned with vim**, so a key means here what it means there. This
   release adds the spellings that were simply missing, none of which displaces an existing
   binding: `ctrl+f` / `ctrl+b` page the row list, and `[[` / `]]` join `[` / `]` on branch

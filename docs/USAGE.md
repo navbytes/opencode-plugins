@@ -112,6 +112,40 @@ a jump with nothing below the selected point skips the question too.
 Every confirmation repeats the promise: *your transcript is never rewritten; the record is
 appended to the trunk as a normal message.*
 
+## Folding the tool calls away
+
+A turn where the model ran six tools is seven rows, and the one you skim for is the `●` user
+turn. So turns older than the **last three on your path** open folded, carrying what they hold:
+
+```
+│ ● T5 add a retry to the flaky test       ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠
+│ ● T6 now make it pass on CI
+│ ⚙ [bash $ bun test src/foo.test.ts] → 3 failed …                        ~5.1k
+│ ○ assistant: the failures share a timing assumption                       ~90
+```
+
+Nothing escapes a fold — the digest is the whole story: how many steps, their tokens, and how
+many were errors (`✗`), fat (`⚠` ≥10k) or already cropped (`✂`).
+
+| key | what it folds |
+|---|---|
+| `za` | toggle the turn you are on |
+| `zo` `zc` | open it · close it |
+| `zr` `zm` | open every fold · fold every turn (`zm` is the pure outline: one row per turn) |
+| `zj` `zk` | jump to the next / previous folded turn |
+
+Three things are deliberate:
+
+- **Your folds beat the rule, and last as long as the tree is open.** `za` on a turn holds
+  whatever the last-3 rule thinks, until you leave `/tree` — so every visit starts from the
+  same clean outline rather than from folds you set days ago.
+- **Crop mode opens everything.** `c` needs the tool results on screen to mark them, so it
+  unfolds while it runs and puts your folds back when you leave. A live `/` search does the
+  same, because a search that hid its own matches would look broken.
+- **The timeline keeps every event.** Folding thins the row list, never the lanes — so with
+  `1`/`2` on, a folded turn is still fully drawn there, and selecting it lights the whole span
+  it stands for, red pills and all. Fold the rows, read the shape on the strip.
+
 ## `/tree` keys
 
 | key | action |
@@ -120,6 +154,9 @@ appended to the trunk as a normal message.*
 | `{` `}` | previous / next `●` turn row. From a step, `{` lands on the turn that owns it first — the way `{` leaves the paragraph you are inside — so it doubles as "top of this turn". With the lanes on, the two keys scrub the timeline turn by turn, because the strip already rules its boundaries there |
 | `[[` `]]` (or `[` `]`) | previous / next branch row |
 | `← →` `h l` · `Tab` (or `e`) | fold / unfold a branch inline |
+| `za` · `zo` `zc` | fold / open / close the turn the cursor is in (from a step row, the turn that owns it — the cursor rides up to it) |
+| `zr` `zm` | open every fold · fold every turn (vim spells these `zR`/`zM`; OpenCode's key parser does not match a shifted second stroke, and with one fold level vim's `zr`/`zm` mean the same thing) |
+| `zj` `zk` | next / previous folded turn |
 | `⏎` | go here — the footer names what it will do for the row you are on: switch to a `⎇` branch, fork & prefill a user turn, fork after a step. Opens Pi's one question (below), which is also the confirmation; `u` undoes it |
 | `b` | branch here: name it, then "Model for this branch" (Enter keeps the current one) |
 | `m` | merge: Squash / Squash without LLM / Discard / Tournament (siblings only) |
