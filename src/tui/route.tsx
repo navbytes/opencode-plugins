@@ -17,7 +17,7 @@ import type { JournalStore } from "../shared/store.js"
 import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyText, createNamedBranch, executeJump, executeUndo, jumpDialogOptions, jumpDialogTitle, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, MERGE_TRUST, setLabel, UNDO_KEY, type ActionContext, type MergeMode, type SummaryChoice } from "./actions.js"
 import { decisionSummary, exportDecisions, renderDecision } from "../core/decision.js"
 import { formatProgress, SPINNER_MS, type ProgressState } from "../core/progress.js"
-import { applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, setManualFold, DEFAULT_OPEN_TURNS, type FoldPolicy } from "../core/fold.js"
+import { applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy } from "../core/fold.js"
 import { laneLabel, laneSuffix, layoutEventStrip, overviewTrack, stripIndexFor, windowFor, LANE_CHROME, type LaneMode, type StripCell } from "../core/lanes.js"
 import { bar, consumers, type Consumer, type ConsumerEntry } from "../core/consumers.js"
 import { hasEditor } from "./editor.js"
@@ -443,16 +443,11 @@ export function TreeRoute(props: TreeRouteProps) {
     })
   })
 
-  /**
-   * What is folded right now. Crop mode and an active search both force everything open:
-   * crop marks live on the step rows, and a search that hid its own matches would read as
-   * broken. Otherwise the stored posture applies, with hand-folds on top.
-   */
-  const foldPolicy = createMemo<FoldPolicy>(() => ({
-    base: cropMode() || search() ? "none" : foldBase(),
-    openTurns: DEFAULT_OPEN_TURNS,
-    manual: cropMode() || search() ? new Map() : manualFolds(),
-  }))
+  /** What is folded right now — the stored posture, unless crop mode or a live search is
+   *  forcing everything open (`core/fold.ts#policyFor` says why). */
+  const foldPolicy = createMemo<FoldPolicy>(() =>
+    policyFor({ base: foldBase(), manual: manualFolds(), cropping: Boolean(cropMode()), searching: Boolean(search()) }),
+  )
 
   const view = createMemo(() => {
     const built = unfolded()

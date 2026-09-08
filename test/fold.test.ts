@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { DEFAULT_OPEN_TURNS, applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, setManualFold, type FoldPolicy } from "../src/core/fold.js"
+import { DEFAULT_OPEN_TURNS, applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy } from "../src/core/fold.js"
 import { buildTreeView, type Row } from "../src/core/tree.js"
 import { formatK } from "../src/core/tokens.js"
 import { buildFixture, OPEN, TRUNK } from "./fixtures/tree.js"
@@ -135,5 +135,26 @@ describe("foldDigest", () => {
     expect(foldDigest({ steps: 6, tokens: 12_000, estimated: false, errors: 0, warns: 0, cropped: 0, messageIDs: [] }, formatK)).toBe("▸ 6 steps · 12k")
     expect(foldDigest({ steps: 1, tokens: 900, estimated: false, errors: 0, warns: 0, cropped: 0, messageIDs: [] }, formatK)).toBe("▸ 1 step · 900")
     expect(foldDigest({ steps: 6, tokens: 12_000, estimated: true, errors: 1, warns: 2, cropped: 1, messageIDs: [] }, formatK)).toBe("▸ 6 steps · ~12k · 1 ✗ · 2 ⚠ · 1 ✂")
+  })
+})
+
+describe("policyFor", () => {
+  const manual = setManualFold(new Map(), "m1", true)
+  test("passes the stored posture through untouched", () => {
+    expect(policyFor({ base: "auto", manual })).toEqual({ base: "auto", openTurns: DEFAULT_OPEN_TURNS, manual })
+  })
+  test("crop mode and a live search force everything open, hand-folds included", () => {
+    for (const forcing of [{ cropping: true }, { searching: true }]) {
+      const p = policyFor({ base: "all", manual, ...forcing })
+      expect(p.base).toBe("none")
+      expect(p.manual.size).toBe(0)
+    }
+  })
+  test("neither disturbs what is stored — leaving one puts the folds back", () => {
+    const during = policyFor({ base: "all", manual, cropping: true })
+    const after = policyFor({ base: "all", manual })
+    expect(during.manual).not.toBe(manual)
+    expect(after.manual).toBe(manual)
+    expect(after.base).toBe("all")
   })
 })

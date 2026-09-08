@@ -44,6 +44,27 @@ export const DEFAULT_OPEN_TURNS = 3
 
 export const NO_FOLDS: FoldPolicy = { base: "none", openTurns: DEFAULT_OPEN_TURNS, manual: new Map() }
 
+/**
+ * The policy in force, from the stored posture and what the route is doing. Crop mode and a
+ * live search both force everything open: crop marks live on the step rows, and a search that
+ * hid its own matches would read as broken. Neither disturbs the stored posture — leaving
+ * either one puts your folds back.
+ */
+export function policyFor(input: {
+  base: FoldPolicy["base"]
+  openTurns?: number
+  manual: ReadonlyMap<string, boolean>
+  cropping?: boolean
+  searching?: boolean
+}): FoldPolicy {
+  const forceOpen = Boolean(input.cropping || input.searching)
+  return {
+    base: forceOpen ? "none" : input.base,
+    openTurns: input.openTurns ?? DEFAULT_OPEN_TURNS,
+    manual: forceOpen ? new Map() : input.manual,
+  }
+}
+
 /** A folded turn row: same row, plus what it is standing in for. */
 export type FoldedTurnRow = TurnRow & { folded: true; fold: FoldSummary }
 
