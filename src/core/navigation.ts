@@ -52,6 +52,24 @@ export function nextBranchIndex(rows: Row[], index: number, dir: 1 | -1): number
   return index
 }
 
+/**
+ * The next/previous `turn` row from `index` in direction `dir` — the outline's own unit, and
+ * the one the event strip already draws its rules on. Stays put when there is none that way.
+ *
+ * From a step row, `dir: -1` lands on the turn that owns it before moving on to the one above,
+ * the way `{` in vim leaves the paragraph you are inside before leaving the one before it.
+ */
+export function nextTurnIndex(rows: Row[], index: number, dir: 1 | -1): number {
+  if (rows.length === 0) return index
+  let i = index
+  for (let step = 0; step < rows.length; step++) {
+    i += dir
+    if (i < 0 || i >= rows.length) return index
+    if (rows[i]!.kind === "turn") return i
+  }
+  return index
+}
+
 /** Toggle one sessionID's membership in the `expanded` set, returning a new Set
  *  (DESIGN.md §7's `e`/`→` expand, `←` fold). */
 export function toggleExpanded(expanded: Set<string>, sessionID: string): Set<string> {

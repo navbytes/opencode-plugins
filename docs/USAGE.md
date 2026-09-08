@@ -34,10 +34,12 @@ or `"global"` (OpenCode's state dir); `jumpSummary` `"ask"` (default, Pi behavio
 transcript shows `[Old tool result content cleared]` (reversible by undo, but it touches
 OpenCode storage — off by default); `keybinds` overrides any route key by command name,
 e.g. `{ "keybinds": { "open": "ctrl+t", "up": "k,up", "copy": "none" } }` — names are
-`open up down jump_up jump_down half_up half_down first last prev_branch next_branch fold
-unfold toggle go branch label filter_pick filter_prev search search_next search_prev back
-crop crop_toggle_mode mark auto undo merge inspector inspector_full inspector_up inspector_down
-consumers copy mode_duration mode_turns lanes_off decisions export help`.
+`open up down page_up page_down half_up half_down screen_top screen_middle screen_bottom
+first last prev_turn next_turn prev_branch next_branch fold unfold toggle fold_toggle
+fold_open fold_close fold_open_all fold_close_all next_fold prev_fold go branch label
+filter_pick filter_prev search search_next search_prev back crop crop_toggle_mode mark auto
+undo merge inspector inspector_full inspector_up inspector_down consumers copy mode_duration
+mode_turns lanes_off decisions export help`.
 
 ## Upgrading
 
@@ -80,9 +82,23 @@ The option lines say how much you are leaving — `drop the 3 turns · ~14k belo
 the point the two paths share, so redoing trunk turn 2 summarizes turns 2–3, while switching
 from a branch to a sibling summarizes the branch's own turns and not the shared trunk.
 
+While the summary is drafting, the status line says so — and keeps saying so:
+
+```
+⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s · esc cancels
+```
+
+The spinner and the seconds counter mean it is still running; `Progress · 1.2k chars` is the
+model's own draft as it arrives — the section it is writing and how much of it there is. The
+same line covers the steps after it (`writing the ≣ summary into ⎇ try-redis`) and the merge
+draft (`drafting the ◆ record for ⎇ try-redis`). Run one of these from the palette instead of
+the tree — `/merge` from a session — and there is no status line to redraw, so you get a toast
+naming the step instead.
+
 `esc` on the choices puts you back on the same row with nothing done; `esc` while the summary
 is being drafted cancels the draft *and* the move — nothing is forked until the summary is
-ready. A summary that fails outright never blocks the move: you get a notice and go anyway.
+ready, and the line reads `cancelling the branch summary` until it has unwound. A summary that
+fails outright never blocks the move: you get a notice and go anyway.
 Set `jumpSummary: "never"` for a plain confirm instead (the pure `pi-context-tree` stance);
 a jump with nothing below the selected point skips the question too.
 
@@ -98,33 +114,78 @@ a jump with nothing below the selected point skips the question too.
 Every confirmation repeats the promise: *your transcript is never rewritten; the record is
 appended to the trunk as a normal message.*
 
+## Folding the tool calls away
+
+A turn where the model ran six tools is seven rows, and the one you skim for is the `●` user
+turn. So turns older than the **last three on your path** open folded, carrying what they hold:
+
+```
+│ ● T5 add a retry to the flaky test       ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠
+│ ● T6 now make it pass on CI
+│ ⚙ [bash $ bun test src/foo.test.ts] → 3 failed …                        ~5.1k
+│ ○ assistant: the failures share a timing assumption                       ~90
+```
+
+Nothing escapes a fold — the digest is the whole story: how many steps, their tokens, and how
+many were errors (`✗`), fat (`⚠` ≥10k) or already cropped (`✂`).
+
+| key | what it folds |
+|---|---|
+| `za` | toggle the turn you are on |
+| `zo` `zc` | open it · close it |
+| `zr` `zm` | open every fold · fold every turn (`zm` is the pure outline: one row per turn) |
+| `zj` `zk` | jump to the next / previous folded turn |
+
+Three things are deliberate:
+
+- **Your folds beat the rule, and last as long as the tree is open.** `za` on a turn holds
+  whatever the last-3 rule thinks, until you leave `/tree` — so every visit starts from the
+  same clean outline rather than from folds you set days ago.
+- **Crop mode opens everything.** `c` needs the tool results on screen to mark them, so it
+  unfolds while it runs and puts your folds back when you leave. A live `/` search does the
+  same, because a search that hid its own matches would look broken.
+- **The timeline keeps every event.** Folding thins the row list, never the lanes — so with
+  `1`/`2` on, a folded turn is still fully drawn there, and selecting it lights the whole span
+  it stands for, red pills and all. Fold the rows, read the shape on the strip.
+
 ## `/tree` keys
 
 | key | action |
 |---|---|
-| `↑↓` `j k` · `J K` (20) · `ctrl+d` `ctrl+u` · `gg` `G` | move · half page · top / bottom |
-| `[` `]` | previous / next branch row |
-| `← →` `h l` · `Tab` (or `e`) | fold / unfold a branch inline |
+| `↑↓` `j k` · `ctrl+f` `ctrl+b` · `ctrl+d` `ctrl+u` · `gg` `G` | move · page · half page · top / bottom |
+| `H` `M` `L` | the top / middle / bottom row of what is on screen, without scrolling it |
+| `{` `}` | previous / next `●` turn row. From a step, `{` lands on the turn that owns it first — the way `{` leaves the paragraph you are inside — so it doubles as "top of this turn". With the lanes on, the two keys scrub the timeline turn by turn, because the strip already rules its boundaries there |
+| `[[` `]]` (or `[` `]`) | previous / next branch row |
+| `← →` `h l` · `Tab` | fold / unfold a branch inline |
+| `za` · `zo` `zc` | fold / open / close the turn the cursor is in (from a step row, the turn that owns it — the cursor rides up to it) |
+| `zr` `zm` | open every fold · fold every turn (vim spells these `zR`/`zM`; OpenCode's key parser does not match a shifted second stroke, and with one fold level vim's `zr`/`zm` mean the same thing) |
+| `zj` `zk` | next / previous folded turn |
 | `⏎` | go here — the footer names what it will do for the row you are on: switch to a `⎇` branch, fork & prefill a user turn, fork after a step. Opens Pi's one question (below), which is also the confirmation; `u` undoes it |
-| `b` | branch here: name it, then "Model for this branch" (Enter keeps the current one) |
-| `m` | merge: Squash / Squash without LLM / Discard / Tournament (siblings only) |
+| `gb` | branch here: name it, then "Model for this branch" (Enter keeps the current one) |
+| `gm` | merge: Squash / Squash without LLM / Discard / Tournament (siblings only) |
 | `c` `space` `a` `t` `⏎` | crop mode: mark (`space` alone enters it on a croppable row), auto-mark (≥10k tokens, older than 2 turns), result⇄turn, apply |
-| `u` (`x`) | undo |
-| `D` `E` | decisions panel, export `ctree-decisions.md` |
-| `s` | consumers: what is filling the context (`⏎` opens a bucket, `space` marks one entry for crop, `y` copies one). Includes a `≡ system prompt` bucket broken down by part (base prompt, `AGENTS.md`, …) once the plugin has seen one request for the session — it is not croppable, but it is counted, so the total reconciles with the `ctx …` gauge |
+| `u` | undo |
+| `gd` `ge` | decisions panel, export `ctree-decisions.md` |
+| `gs` | consumers: what is filling the context (`⏎` opens a bucket, `space` marks one entry for crop, `y` copies one). Includes a `≡ system prompt` bucket broken down by part (base prompt, `AGENTS.md`, …) once the plugin has seen one request for the session — it is not croppable, but it is counted, so the total reconciles with the `ctx …` gauge |
 | `i` | inspector pane on/off (auto-hidden under 110 columns) |
 | `i` `I` `PgUp` `PgDn` | inspector in the side pane / full screen; page through a long payload or result. The pane shows every line it has, sized to your terminal, with `12–40 of 118` at the foot when there is more; `y` copies the untruncated text. Below 110 columns the side pane does not fit, so `i` opens full screen directly |
-| `1 2` `0` | timeline lanes, x-axis by duration / one cell per event; `0` off. `│` marks a turn boundary, and the lanes show whatever the `f` filter shows — so `f` → `tools-only` is the "what did I run" view in both the rows and the lanes |
-| `L` | label the selected message |
-| `f` `F` | filter picker (default → no-tools → user-only → labeled → all); `F` steps back |
+| `g1` `g2` `g0` | timeline lanes, x-axis by duration / one cell per event; `g0` off. `│` marks a turn boundary, and the lanes show whatever the `gf` filter shows — so `tools-only` is the "what did I run" view in both the rows and the lanes. Folding never thins them |
+| `m` | mark: label the selected message (vim's *set mark*) |
+| `gf` | filter picker (default · no-tools · tools-only · user-only · labeled · all) |
 | `/` `n` `N` | live search: typing re-filters the rows, `⏎` keeps the filter, `esc` clears; `n` `N` next / previous match |
 | `y` | copy the selected text — the terminal's clipboard when it allows it, else `.opencode/context-tree/last-copy.txt` |
 | `?` | help pane under the tree: how to read the screen + every key (`?` or `esc` closes) |
 | `q` `esc` | back (esc leaves crop mode / a panel / a search first) |
 
 The footer follows the panel and the row under the cursor — on the tree `⏎ fork & prefill
-this turn  b branch  m merge  c crop  u undo  s consumers  ? help  q back`; the rest live
+this turn  gb branch  gm merge  c crop  u undo  gs consumers  ? help  q back`; the rest live
 behind `?`.
+
+The keys follow vim: `j k`, `ctrl+f`/`ctrl+b`, `ctrl+d`/`ctrl+u`, `gg`/`G`, `H M L`, `{ }`,
+`[[ ]]`, `/ n N`, `y`, `u`, `m`, and the whole `z` fold family mean what they mean there. The
+verbs vim has no word for — branch, merge, filter, the panels — live behind `g`, the way LSP
+plugins put theirs (`gd`, `gr`, `gi`). Two deliberate exceptions: `?` is help rather than
+reverse search (`/` with `N` covers that), and `q`/`esc` is back.
 
 Palette: **Context tree**, **Branch here**, **Merge branch**, **Decisions**, **Label this point**.
 `ctrl+q` opens the tree.

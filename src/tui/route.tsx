@@ -8,14 +8,16 @@ import { PLUGIN_VERSION } from "../shared/version.js"
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { abandonedTail, planJump, type AbandonedTail, type JumpPlan } from "../core/actions.js"
 import { foldJournal, type TreeState } from "../core/journal.js"
-import { firstIndex, lastIndex, moveSelection, nextBranchIndex, paneWindow, resolveSelection, scrollPane, toggleExpanded } from "../core/navigation.js"
+import { firstIndex, lastIndex, moveSelection, nextBranchIndex, nextTurnIndex, paneWindow, resolveSelection, scrollPane, toggleExpanded } from "../core/navigation.js"
 import { contextSizeOf, formatContext, formatK, type MinimalMessage } from "../core/tokens.js"
 import { buildSpineMap, buildTreeView, currentChainOf, formatPromptAt, promptAtRow, type Filter, type Row, type StepRow, type TurnRow } from "../core/tree.js"
 import { ContextGauge } from "./gauge.js"
 import type { Transcript } from "../core/transcript.js"
 import type { JournalStore } from "../shared/store.js"
-import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyText, createNamedBranch, describeTail, executeJump, executeUndo, jumpDialogOptions, jumpDialogTitle, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, MERGE_TRUST, setLabel, UNDO_KEY, type ActionContext, type MergeMode, type SummaryChoice } from "./actions.js"
+import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyText, createNamedBranch, executeJump, executeUndo, jumpDialogOptions, jumpDialogTitle, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, MERGE_TRUST, setLabel, UNDO_KEY, type ActionContext, type MergeMode, type SummaryChoice } from "./actions.js"
 import { decisionSummary, exportDecisions, renderDecision } from "../core/decision.js"
+import { formatProgress, SPINNER_MS, type ProgressState } from "../core/progress.js"
+import { applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy } from "../core/fold.js"
 import { laneLabel, laneSuffix, layoutEventStrip, overviewTrack, stripIndexFor, windowFor, LANE_CHROME, type LaneMode, type StripCell } from "../core/lanes.js"
 import { bar, consumers, type Consumer, type ConsumerEntry } from "../core/consumers.js"
 import { hasEditor } from "./editor.js"
@@ -108,9 +110,7 @@ function rowLine(row: Row, width: number, here: boolean): string {
     const flags =
       row.kind === "step"
         ? `${row.label ? ` [${row.label}]` : ""}${row.isCropped ? " ✂" : ""}${row.warn ? " ⚠" : ""}${row.isError ? " ✗" : ""}`
-        : row.label
-          ? ` [${row.label}]`
-          : ""
+        : `${row.label ? ` [${row.label}]` : ""}${isFolded(row) ? `   ${foldDigest(row.fold, formatK)}` : ""}`
     const dur = row.kind === "step" && row.durationMs !== undefined ? ` ${(row.durationMs / 1000).toFixed(row.durationMs < 10_000 ? 1 : 0)}s` : ""
     body = `${row.gutter}${glyphOf(row)} ${textOf(row)}${flags}${dur}${thoughtOf(row)}${marker}`
   }
@@ -147,40 +147,62 @@ function segmentsOf(line: string, query: string, thought: string): Segment[] {
 const DEFAULT_KEYS: Record<string, string[]> = {
   up: ["up", "k"],
   down: ["down", "j"],
-  jump_up: ["shift+up", "shift+k"],
-  jump_down: ["shift+down", "shift+j"],
+  // vim's H / M / L: the top, middle and bottom of what is on screen
+  screen_top: ["shift+h"],
+  screen_middle: ["shift+m"],
+  screen_bottom: ["shift+l"],
   half_up: ["ctrl+u"],
   half_down: ["ctrl+d"],
+  page_up: ["ctrl+b"],
+  page_down: ["ctrl+f"],
   // a sequence, so bare `g` is free (and never fires on its own)
   first: ["gg"],
   last: ["shift+g"],
-  prev_branch: ["["],
-  next_branch: ["]"],
+  // `[[` / `]]` is vim's section motion; the single-bracket spellings stay as aliases
+  prev_branch: ["[[", "["],
+  next_branch: ["]]", "]"],
+  prev_turn: ["{"],
+  next_turn: ["}"],
   fold: ["left", "h"],
   unfold: ["right", "l"],
-  toggle: ["tab", "e"],
+  // vim's fold vocabulary, on turns: the tree already had folds, it just had no verbs
+  fold_toggle: ["za"],
+  fold_open: ["zo"],
+  fold_close: ["zc"],
+  // vim spells "all folds" zR/zM, but this host's binding parser does not match a shifted
+  // second stroke (verified in the TUI e2e), and with a single fold level vim's own zr/zm
+  // — one level less/more folding — mean exactly the same thing here
+  fold_open_all: ["zr"],
+  fold_close_all: ["zm"],
+  next_fold: ["zj"],
+  prev_fold: ["zk"],
+  toggle: ["tab"],
   go: ["return"],
-  branch: ["b"],
+  branch: ["gb"],
   crop: ["c"],
   crop_toggle_mode: ["t"],
   mark: ["space"],
   auto: ["a"],
-  undo: ["u", "x"],
-  merge: ["m"],
+  undo: ["u"],
+  merge: ["gm"],
   inspector: ["i"],
   inspector_full: ["shift+i"],
   inspector_up: ["pageup"],
   inspector_down: ["pagedown"],
-  consumers: ["s"],
+  consumers: ["gs"],
   copy: ["y"],
-  mode_duration: ["1"],
-  mode_turns: ["2"],
-  lanes_off: ["0"],
-  decisions: ["shift+d"],
-  export: ["shift+e"],
-  label: ["shift+l"],
-  filter_pick: ["f"],
-  filter_prev: ["shift+f"],
+  // bare digits are counts in vim, so the lane modes move behind `g` and leave them free
+  mode_duration: ["g1"],
+  mode_turns: ["g2"],
+  lanes_off: ["g0"],
+  decisions: ["gd"],
+  export: ["ge"],
+  // vim's "set mark": a label is a bookmark on a message
+  label: ["m"],
+  filter_pick: ["gf"],
+  // no default: the picker replaced the step-back, and every free single stroke is a vim
+  // motion. Still a command, so `keybinds: { filter_prev: "..." }` can give it one.
+  filter_prev: [],
   search: ["/"],
   search_next: ["n"],
   search_prev: ["shift+n"],
@@ -196,23 +218,25 @@ const INSPECTOR_MAX_LINES = 2000
 /** Placeholder for the strip while no session is loaded. */
 const EMPTY_TRANSCRIPT: Transcript = { sessionID: "", title: "", status: "available", messages: [] }
 
-const NO_BRANCHES = "No branches yet · b forks here into a real OpenCode session; nothing is copied or deleted."
+const NO_BRANCHES = "No branches yet · gb forks here into a real OpenCode session; nothing is copied or deleted."
 
 /** The `?` pane: unindented lines are headings, indented ones body (see the render).
  *  It sits under the rows, so the tree stays on screen while you read it. */
 const HELP = [
   `? help · ? or esc closes · opencode-context-tree ${PLUGIN_VERSION}`,
   "Move",
-  "  ↑↓ j k · J K by 20 · ctrl+d ctrl+u half page · gg top · G bottom · [ ] branch rows",
-  "  h l ← → fold/unfold a branch · Tab (or e) toggle · / live search · n N next/prev match",
+  "  ↑↓ j k · ctrl+f ctrl+b page · ctrl+d ctrl+u half page · H M L screen top/middle/bottom · gg G",
+  "  { } turn rows (the lanes scrub with them) · [[ ]] (or [ ]) branch rows",
+  "  h l ← → fold/unfold a branch · Tab toggle · / live search · n N next/prev match",
+  "  za fold this turn · zo zc open/close · zr all open · zm all folded · zj zk between folds",
   "Act",
   "  ⏎ go — a ⎇ header switches to it · a user turn forks & prefills it · a step forks after it",
   "     then: no summary · summarize everything below that point · summarize with your own prompt (esc stays put)",
-  "  b branch · m merge · c crop mode (space mark · a auto · t result⇄turn · ⏎ apply · esc leave)",
-  "  u undo (alias x) · L label · y copy · E export decisions",
+  "  gb branch · gm merge · c crop mode (space mark · a auto · t result⇄turn · ⏎ apply · esc leave)",
+  "  u undo · m mark (label) · y copy · ge export decisions",
   "Views",
-  "  i inspector · I full screen · PgUp/PgDn scroll it · 1 2 lanes (duration/turns x-axis) · 0 off",
-  "  s consumers · D decisions · f F filter",
+  "  i inspector · I full screen · PgUp/PgDn scroll it · g1 g2 lanes (duration/turns x-axis) · g0 off",
+  "  gs consumers · gd decisions · gf filter",
   "Legend",
   "  ● user · ○ assistant · ⚙ tool step · ◆ decision · ≣ summary · ⎇ branch (a real OpenCode session)",
   "  │ ├ ╰ draw the topology · ▾ open ▸ folded · ← here is the session you are in",
@@ -222,10 +246,11 @@ const HELP = [
   "  ⎇ colours: open green · squashed blue · rejected/discarded red · abandoned grey",
   "  lanes: Input green you / grey context · Model purple answer / grey thinking · Tools orange call / red failed",
   "  the lanes are a window that follows the cursor: …N / N… are events hidden either side, all = whole session",
-  "  │ in the lanes is a turn boundary · the lanes show what the f filter shows (f → tools-only = just calls)",
+  "  │ in the lanes is a turn boundary · the lanes show what the gf filter shows (→ tools-only = just calls)",
 ]
 
-/** `f` opens this as a picker; `F` steps back through it (DESIGN.md §7.5). */
+/** `gf` opens this as a picker (DESIGN.md §7.5). `filter_prev` steps back through it, with no
+ *  default key since every free single stroke means something in vim — `keybinds` can add one. */
 const FILTERS: { title: string; value: Filter; description: string }[] = [
   { title: "default", value: "default", description: "user turns, assistant text, tool steps" },
   { title: "no-tools", value: "no-tools", description: "hide ⚙ tool steps" },
@@ -259,10 +284,23 @@ export function TreeRoute(props: TreeRouteProps) {
   const [selected, setSelected] = createSignal(0)
   const [others, setOthers] = createSignal<Record<string, Transcript>>({})
   const [busy, setBusy] = createSignal<string | undefined>()
+  /** The step a slow action is on, redrawn every frame while it runs (`ctx.progress`). */
+  const [progress, setProgress] = createSignal<ProgressState | undefined>()
+  /** Ticks the clock the progress line reads, so its spinner turns and its counter climbs
+   *  while we are inside an `await` that publishes nothing of its own. */
+  const [frame, setFrame] = createSignal(0)
+  /** When `esc` asked to cancel a draft: the line says so until the flow actually unwinds,
+   *  which takes as long as the abort takes to reach the server. */
+  const [cancelling, setCancelling] = createSignal<number | undefined>()
   /** Set while a jump is drafting its branch summary: `esc` cancels the draft, and with it the
    *  jump — nothing has been forked or switched yet (Pi's `abortBranchSummary`). */
   const [summaryAbort, setSummaryAbort] = createSignal<AbortController | undefined>()
   const [cropMode, setCropMode] = createSignal<"result" | "turn" | undefined>()
+  /** Fold posture for turns nobody has touched (`zr` opens all, `zm` closes all), and the
+   *  hand-folds that override it. Route state on purpose: your folds hold while the tree is
+   *  open and every visit starts from the same clean outline (DESIGN.md §7.5). */
+  const [foldBase, setFoldBase] = createSignal<FoldPolicy["base"]>("auto")
+  const [manualFolds, setManualFolds] = createSignal<ReadonlyMap<string, boolean>>(new Map())
   const [panel, setPanel] = createSignal<"tree" | "decisions" | "consumers" | "help">(props.initialView ?? "tree")
   // "calls" was a third mode until it became the `tools-only` row filter; old kv still holds it
   const [laneMode, setLaneMode] = createSignal<LaneMode>(api.kv.get<LaneMode>("ctree.lanes", "turns") === "duration" ? "duration" : "turns")
@@ -292,7 +330,31 @@ export function TreeRoute(props: TreeRouteProps) {
     noticeTimer = setTimeout(() => setNotice(undefined), ms)
   }
   onCleanup(() => clearTimeout(noticeTimer))
-  const ctx: ActionContext = { api, store, directory, notify }
+
+  /** A step's live line: a new label restarts the elapsed counter, the same label keeps it
+   *  (a streaming draft refreshes the state many times a second), `undefined` clears it. */
+  const reportProgress = (state: Omit<ProgressState, "startedAt"> | undefined) => {
+    if (!state) {
+      setProgress(undefined)
+      setCancelling(undefined)
+      return
+    }
+    const open = progress()
+    setProgress({ ...state, startedAt: open && open.label === state.label ? open.startedAt : Date.now() })
+  }
+  const ctx: ActionContext = { api, store, directory, notify, progress: reportProgress }
+
+  // one interval for as long as something is running, rather than a permanently ticking route
+  createEffect(
+    on(
+      () => progress() !== undefined,
+      (running) => {
+        if (!running) return
+        const timer = setInterval(() => setFrame((n) => n + 1), SPINNER_MS)
+        onCleanup(() => clearInterval(timer))
+      },
+    ),
+  )
 
   const state = createMemo<TreeState>(() => {
     tick()
@@ -351,7 +413,8 @@ export function TreeRoute(props: TreeRouteProps) {
   const transcripts = createMemo(() => (sessionID ? { ...others(), [sessionID]: live()! } : {}))
   const spine = createMemo(() => buildSpineMap({ state: state(), transcripts: transcripts(), currentSessionID: sessionID ?? "" }))
 
-  const view = createMemo(() => {
+  /** The rows the filter produced, before folding — `view` below collapses turns on top. */
+  const unfolded = createMemo(() => {
     if (!sessionID) return { rows: [] as Row[], indexById: {}, currentRowId: undefined, totalTokens: 0, totalEstimated: false }
     const st = state()
     const labels: Record<string, string> = {}
@@ -378,6 +441,29 @@ export function TreeRoute(props: TreeRouteProps) {
       labels,
       crops,
     })
+  })
+
+  /** What is folded right now — the stored posture, unless crop mode or a live search is
+   *  forcing everything open (`core/fold.ts#policyFor` says why). */
+  const foldPolicy = createMemo<FoldPolicy>(() =>
+    policyFor({ base: foldBase(), manual: manualFolds(), cropping: Boolean(cropMode()), searching: Boolean(search()) }),
+  )
+
+  const view = createMemo(() => {
+    const built = unfolded()
+    const rows = applyFolds(built.rows, foldPolicy())
+    if (rows === built.rows) return built
+    const indexById: Record<string, number> = {}
+    rows.forEach((r, i) => (indexById[r.id] = i))
+    // "you are here" can be inside a fold now, and a fold stands for what it swallowed: hand
+    // the marker (and the cursor the resolver puts on it) to the turn row that ate it
+    let currentRowId = built.currentRowId
+    if (currentRowId !== undefined && indexById[currentRowId] === undefined) {
+      const owner = ownerTurnIndex(built.rows, built.indexById[currentRowId] ?? -1)
+      const id = owner >= 0 ? built.rows[owner]!.id : undefined
+      if (id !== undefined && indexById[id] !== undefined) currentRowId = id
+    }
+    return { ...built, rows, indexById, currentRowId }
   })
 
   // Keep the cursor sensible when the list is rebuilt.
@@ -601,7 +687,17 @@ export function TreeRoute(props: TreeRouteProps) {
     const pid = row.kind === "step" ? (currentPartOf(row) ?? row.partID) : undefined
     const own = stripIndexFor(layout(), mid, pid)
     if (own >= 0) hit.add(own)
+    // A folded turn stands for everything it swallowed, so it lights that whole span across
+    // the three lanes: the strip keeps every event a fold hides, and this is where you see
+    // how much one collapsed row is standing in for — errors included, as red pills.
+    const swallowed = isFolded(row)
+      ? new Set(row.fold.messageIDs.map((id) => (row.sessionID === sessionID ? id : (spine().toCurrent(row.sessionID, id) ?? id))))
+      : undefined
     layout().events.forEach((e, i) => {
+      if (swallowed?.has(e.messageID)) {
+        hit.add(i)
+        return
+      }
       if (e.messageID !== mid) return
       if (row.kind === "turn" ? e.lane === "input" : e.kind === "reasoning") hit.add(i)
     })
@@ -1073,13 +1169,10 @@ export function TreeRoute(props: TreeRouteProps) {
     if (!choice) return
     await guarded("jump", async () => {
       const controller = new AbortController()
-      const summarizing = choice.kind === "summarize"
-      if (summarizing) {
-        setSummaryAbort(controller)
-        notify(`summarizing ${describeTail(tail)} below this point — esc to skip`, 120_000)
-      }
+      // `esc` reaches the draft through this controller; executeJump reports the stages
+      if (choice.kind === "summarize") setSummaryAbort(controller)
       try {
-        const out = await executeJump(ctx, plan, { currentSessionID: sessionID!, summary: choice, abandoned: tail.messages, signal: controller.signal })
+        const out = await executeJump(ctx, plan, { currentSessionID: sessionID!, summary: choice, abandoned: tail, signal: controller.signal })
         if (out.aborted) {
           notify("summary cancelled — nothing moved")
           return
@@ -1147,6 +1240,45 @@ export function TreeRoute(props: TreeRouteProps) {
     bump()
   }
 
+  /**
+   * `za` / `zo` / `zc` on the turn the cursor is in (a step row folds the turn that owns it,
+   * and the cursor rides up to it — the row it was on is about to stop existing).
+   */
+  function foldTurn(how: "toggle" | "open" | "close") {
+    const rows = view().rows
+    const owner = ownerTurnIndex(rows, selected())
+    if (owner < 0) return
+    const row = rows[owner]!
+    if (row.kind !== "turn") return
+    const folded = how === "toggle" ? !isFolded(row) : how === "close"
+    // a turn with nothing under it has nothing to fold; say so rather than drawing a ▸ that
+    // opens onto nothing
+    if (folded && !isFolded(row) && ownerCount(rows, owner) === 0) {
+      notify("nothing to fold on this turn")
+      return
+    }
+    setManualFolds((m) => setManualFold(m, row.messageID, folded))
+    setSelected(owner)
+  }
+
+  /** Step rows currently drawn under the turn at `index`. */
+  function ownerCount(rows: Row[], index: number): number {
+    let n = 0
+    for (let i = index + 1; i < rows.length; i++) {
+      if (rows[i]!.kind !== "step") break
+      n++
+    }
+    return n
+  }
+
+  /** `zr` / `zm`: the posture for every turn nobody has touched, and the hand-folds go with it
+   *  — otherwise "open everything" would leave your own closed turns shut. */
+  function foldAll(base: FoldPolicy["base"]) {
+    setFoldBase(base)
+    setManualFolds(new Map())
+    notify(base === "all" ? "all turns folded — zr opens them" : "all turns open — zm folds them")
+  }
+
   function foldOrUnfold(open: boolean) {
     const row = current()
     if (!row) return
@@ -1188,7 +1320,7 @@ export function TreeRoute(props: TreeRouteProps) {
     if (!sessionID) return
     const b = branchOfCurrent()
     if (!b || b.status !== "open") {
-      notify(b ? `⎇ ${branchLabel(api, sessionID, b.name, 24)} is already ${b.status}` : "no open branch to merge · b starts one")
+      notify(b ? `⎇ ${branchLabel(api, sessionID, b.name, 24)} is already ${b.status}` : "no open branch to merge · gb starts one")
       return
     }
     const siblings = Object.values(state().sessions).filter((x) => x.parentSessionID === b.parentSessionID && x.sessionID !== sessionID && x.status === "open").length
@@ -1259,6 +1391,25 @@ export function TreeRoute(props: TreeRouteProps) {
       return
     }
     setSelected((i) => moveSelection(view().rows, i, delta))
+  }
+
+  /** vim's `H` / `M` / `L`: the cursor moves to what is already on screen, the window does not
+   *  move. Separators are decoration, so land on the nearest row that can hold a cursor. */
+  function toScreen(where: "top" | "middle" | "bottom") {
+    const rows = view().rows
+    if (rows.length === 0) return
+    const start = windowStart()
+    const end = Math.min(rows.length, start + rowsHeight()) - 1
+    const want = where === "top" ? start : where === "bottom" ? end : start + Math.floor((end - start) / 2)
+    setSelected(moveSelection(rows, Math.max(start, Math.min(end, want)), 0))
+  }
+
+  /** `ctrl+f` / `ctrl+b`: a whole screen, vim's page motion. One row of overlap, as vim
+   *  leaves, so the line you were reading is still there to orient by. */
+  function page(dir: 1 | -1) {
+    const rows = Math.max(1, height() - 1)
+    if (panel() === "decisions") setDecisionScroll((sc) => Math.max(0, sc + dir * rows))
+    else moveIndex(dir * rows)
   }
 
   function halfPage(dir: 1 | -1) {
@@ -1338,14 +1489,26 @@ export function TreeRoute(props: TreeRouteProps) {
     commands: [
       { name: "ctree.up", hidden: true, run: () => moveIndex(-1) },
       { name: "ctree.down", hidden: true, run: () => moveIndex(1) },
-      { name: "ctree.jump_up", hidden: true, enabled: treePanel, run: () => moveIndex(-20) },
-      { name: "ctree.jump_down", hidden: true, enabled: treePanel, run: () => moveIndex(20) },
+      { name: "ctree.screen_top", hidden: true, enabled: treePanel, run: () => toScreen("top") },
+      { name: "ctree.screen_middle", hidden: true, enabled: treePanel, run: () => toScreen("middle") },
+      { name: "ctree.screen_bottom", hidden: true, enabled: treePanel, run: () => toScreen("bottom") },
       { name: "ctree.half_up", hidden: true, run: () => halfPage(-1) },
       { name: "ctree.half_down", hidden: true, run: () => halfPage(1) },
+      { name: "ctree.page_up", hidden: true, run: () => page(-1) },
+      { name: "ctree.page_down", hidden: true, run: () => page(1) },
       { name: "ctree.first", hidden: true, run: () => gotoEdge(-1) },
       { name: "ctree.last", hidden: true, run: () => gotoEdge(1) },
       { name: "ctree.prev_branch", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextBranchIndex(view().rows, i, -1)) },
       { name: "ctree.next_branch", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextBranchIndex(view().rows, i, 1)) },
+      { name: "ctree.fold_toggle", hidden: true, enabled: treeIdle, run: () => foldTurn("toggle") },
+      { name: "ctree.fold_open", hidden: true, enabled: treeIdle, run: () => foldTurn("open") },
+      { name: "ctree.fold_close", hidden: true, enabled: treeIdle, run: () => foldTurn("close") },
+      { name: "ctree.fold_open_all", hidden: true, enabled: treeIdle, run: () => foldAll("none") },
+      { name: "ctree.fold_close_all", hidden: true, enabled: treeIdle, run: () => foldAll("all") },
+      { name: "ctree.next_fold", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextFoldIndex(view().rows, i, 1)) },
+      { name: "ctree.prev_fold", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextFoldIndex(view().rows, i, -1)) },
+      { name: "ctree.prev_turn", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextTurnIndex(view().rows, i, -1)) },
+      { name: "ctree.next_turn", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextTurnIndex(view().rows, i, 1)) },
       { name: "ctree.fold", hidden: true, enabled: listPanel, run: () => (panel() === "consumers" ? toggleConsumer(false) : foldOrUnfold(false)) },
       { name: "ctree.unfold", hidden: true, enabled: listPanel, run: () => (panel() === "consumers" ? toggleConsumer(true) : foldOrUnfold(true)) },
       { name: "ctree.toggle", hidden: true, enabled: treePanel, run: () => foldOrUnfold(!(current()?.kind === "branch" && (current() as Row & { kind: "branch" }).expanded)) },
@@ -1429,7 +1592,8 @@ export function TreeRoute(props: TreeRouteProps) {
           if (draft) {
             draft.abort()
             setSummaryAbort(undefined)
-            notify("cancelling the branch summary…")
+            if (progress()) setCancelling(Date.now())
+            else notify("cancelling the branch summary…")
             return
           }
           if (showInspectorFull() && inspectorFull()) {
@@ -1512,6 +1676,13 @@ export function TreeRoute(props: TreeRouteProps) {
       return `✂ crop mode (${cropMode()}) · space mark · a auto · t result⇄turn · ⏎ apply · esc leave · marked ${selectedCandidates().length} ~${formatK(reclaimed(selectedCandidates()))}${a ? " · armed — space again to override" : ""}`
     }
     if (searchMode()) return `search: ${search()}▏ · ${pos} rows · ⏎ keeps it · esc clears`
+    // a step in flight owns the line: it is the only thing on screen that is still changing
+    const running = progress()
+    if (running) {
+      frame()
+      const stopping = cancelling()
+      return clipTo(formatProgress(stopping === undefined ? running : { label: "cancelling the branch summary", startedAt: stopping }, Date.now()), cols())
+    }
     const said = notice()
     if (said) return `${clipTo(said, cols())}   ${pos} rows`
     const left = `filter: ${filter()}${search() ? `   search: "${search()}"` : ""}${busy() ? `   … ${busy()}` : ""}   ${pos} rows`
@@ -1538,7 +1709,7 @@ export function TreeRoute(props: TreeRouteProps) {
     if (panel() === "decisions") return "⏎ jump to record  E export  q back"
     if (panel() === "consumers") return "⏎ expand  space mark  c crop  q back"
     if (panel() === "help") return "esc/q back"
-    return `${goVerb()}  b branch  m merge  c crop  ${UNDO_KEY} undo  s consumers  ? help  q back`
+    return `${goVerb()}  gb branch  gm merge  c crop  ${UNDO_KEY} undo  gs consumers  ? help  q back`
   }
 
   const showsTree = () => panel() === "tree" || panel() === "help"
@@ -1578,7 +1749,7 @@ export function TreeRoute(props: TreeRouteProps) {
             <Show when={!layout().empty.tools} fallback={<text fg={t.textMuted}>{"no tool calls".padEnd(laneWidth())}</text>}>
               <For each={toolRuns()}>{(r) => <text fg={r.fg as never} bg={r.bg as never}>{r.text}</text>}</For>
             </Show>
-            <text fg={t.textMuted}>{"   i inspector · s consumers"}</text>
+            <text fg={t.textMuted}>{"   i inspector · gs consumers"}</text>
           </box>
           <Show when={laneOverview()}>
             <box flexDirection="row">
@@ -1593,7 +1764,7 @@ export function TreeRoute(props: TreeRouteProps) {
       </Show>
       <text fg={cropMode() ? t.warning : searchMode() ? t.accent : t.textMuted}>│ {statusLine()}</text>
       <Show when={panel() === "decisions"}>
-        <text fg={t.accent}>│ ◆ decisions on this tree ({decisions().length}) · ⏎ jump to record · E export markdown · q back</text>
+        <text fg={t.accent}>│ ◆ decisions on this tree ({decisions().length}) · ⏎ jump to record · ge export markdown · q back</text>
         <Show when={decisions().length === 0}>
           <text fg={t.textMuted}>│ (none yet — /merge a branch to write one)</text>
         </Show>

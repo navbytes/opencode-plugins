@@ -119,6 +119,23 @@ one question with Pi's three answers — fork clean, summarize everything below 
 or summarize it with your own prompt — and the answer is also the confirmation. The
 summary covers exactly the turns the move leaves behind.
 
+Turns older than the last three fold to one row each, so the outline reads as an outline
+rather than a wall of tool calls:
+
+```
+● T5 add a retry to the flaky test        ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠
+```
+
+`za` folds or opens the turn you are on, `zm` folds them all, `zr` opens them all — vim's own
+fold keys. Nothing is lost: the digest counts what is inside, the timeline still shows every
+event (a folded turn lights the whole span it stands for), and crop mode opens everything
+while you pick targets.
+
+Drafting one takes a model call, so the status line shows it happening —
+`⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s · esc cancels`: the step, the
+draft as it streams in, how long it has been, and the way out. The `◆` record a `/merge`
+drafts reports the same way.
+
 ## The screen
 
 `/tree` is an outline of the whole session. Every message and tool call is one
@@ -197,25 +214,33 @@ cache was reset.
 
 ## Keys
 
-Vim-aligned, inside `/tree`. Press `?` for the full list without leaving the screen.
+Vim-aligned, inside `/tree`: a key means here what it means in vim, and the verbs vim has no
+word for live behind `g` the way LSP plugins put theirs (`gd`, `gr`, `gi`). Press `?` for the
+full list without leaving the screen. Every key is rebindable — see `keybinds` in
+[Configuration](#configuration).
 
 | Key | Action |
 |---|---|
-| `j` `k` · `ctrl+d` `ctrl+u` · `gg` `G` | move · half page · top / bottom |
-| `[` `]` | previous / next branch row |
+| `j` `k` · `ctrl+f` `ctrl+b` · `ctrl+d` `ctrl+u` · `gg` `G` | move · page · half page · top / bottom |
+| `{` `}` | previous / next turn row — the outline's own unit; the lanes scrub with it |
+| `[[` `]]` (or `[` `]`) | previous / next branch row |
 | `h` `l` · `Tab` | fold / unfold a branch inline |
+| `za` · `zo` `zc` | fold / open / close the turn you are on |
+| `zr` `zm` · `zj` `zk` | open every fold / fold every turn · move between folds |
+| `H` `M` `L` | top / middle / bottom of the screen |
 | `⏎` | go here — the footer names what it will do for this row |
-| `b` | branch here, naming it and optionally picking a model |
-| `m` | merge: squash, squash without the model, discard, or tournament |
+| `gb` | branch here, naming it and optionally picking a model |
+| `gm` | merge: squash, squash without the model, discard, or tournament |
 | `c` | crop mode — `space` mark, `a` auto-mark, `t` result⇄turn, `⏎` apply |
-| `u` (`x`) | undo the last branch / merge / crop |
+| `u` | undo the last branch / merge / crop |
+| `m` | mark: label the selected message |
 | `/` · `n` `N` | live search · next / previous match |
-| `f` `F` | filter picker, forwards / back |
+| `gf` | filter picker |
 | `i` `I` | inspector in the side pane / full screen (`PgUp` `PgDn` to page) |
-| `1` `2` · `0` | timeline lanes, x-axis by duration / one cell per event · off |
-| `s` | what is filling the context |
-| `D` `E` | decisions panel · export to `ctree-decisions.md` |
-| `L` `y` | label this point · copy the selected text |
+| `g1` `g2` · `g0` | timeline lanes, x-axis by duration / one cell per event · off |
+| `gs` | what is filling the context |
+| `gd` `ge` | decisions panel · export to `ctree-decisions.md` |
+| `y` | copy the selected text |
 | `?` `q` | help · back |
 
 ## Commands

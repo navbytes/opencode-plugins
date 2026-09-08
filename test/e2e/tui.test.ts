@@ -53,7 +53,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
           ["Crop 1 result", 6, "third\\r"],
           ["Crop 1 result", 16, "/tree"],
           ["Crop 1 result", 17, "\\r"],
-          ["Crop 1 result", 20, "x"],
+          ["Crop 1 result", 20, "u"],
           ["Undo?", 1.5, "\\r"],
           ["Undo?", 4, "q"],
           ["Undo?", 6, "fourth\\r"],
@@ -102,7 +102,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
           ["merged", 3, "third\\r"],
           ["merged", 12, "/tree"],
           ["merged", 13, "\\r"],
-          ["merged", 16, "x"],
+          ["merged", 16, "u"],
           ["Undo?", 1.5, "\\r"],
           ["Undo?", 5, "\\x03"],
           ["Undo?", 6, "\\x03"],
@@ -245,7 +245,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
           ["Ask anything", 1, "hello\r"],
           ["mock reply", 8, "/tree"],
           ["Context tree", 0.5, "\r"],
-          ["Context tree ·", 2, "s"],
+          ["Context tree ·", 2, "gs"],
           ["what's filling|consumers", 3, "\x03"],
           ["", 1, "\x03"],
         ],
@@ -275,6 +275,100 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
       const consumers = screens.find((s) => s.screen.includes("what's filling the context"))
       if (!consumers) throw new Error(`consumers panel never rendered. screens: ${screens.map((s) => s.label).join(" | ")}`)
       expect(consumers.screen).toContain("≡ system prompt")
+    } finally {
+      await m.stop()
+      await proj.cleanup()
+    }
+  }, 300_000)
+
+  test("za folds one turn, zm folds them all, zr opens them again", async () => {
+    // the fold keys are two-stroke sequences, which nothing else in the keymap was until now:
+    // this test exists to prove they really fire against the real TUI
+    const toolMock = await startMock({ tool: true })
+    const proj = await createProject({ mockPort: toolMock.port })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    try {
+      const { screens } = await runTuiScreens({
+        projectDir: proj.dir,
+        keys: [
+          ["Ask anything", 1, "run the tool\r"],
+          ["mock reply", 8, "second\r"],
+          ["mock reply", 16, "/tree"],
+          ["Context tree", 0.5, "\r"],
+          ["Context tree ·", 2.5, "gg"],
+          ["Context tree ·", 3.5, "za"],
+          ["Context tree ·", 5, "zr"],
+          ["Context tree ·", 6.5, "zm"],
+          ["Context tree ·", 8, "q"],
+          ["Ask anything|mock reply", 1, "\x03"],
+          ["", 1, "\x03"],
+        ],
+        timeoutSec: 180,
+        cols: 130,
+        rows: 34,
+        exitWhenDone: true,
+      })
+      if (process.env["CTREE_DUMP"]) await Bun.write(process.env["CTREE_DUMP"]!, screens.map((x) => `=== ${x.label}\n${x.screen}`).join("\n"))
+      // screens are captured *before* each key, so key N's screen is the state key N-1 left:
+      // assert the state itself rather than the notice, which has a lifetime of its own
+      const before = (key: number) => {
+        const hit = screens.find((x) => x.label.includes(`conditional key ${key}`))
+        if (!hit) throw new Error(`no screen before key ${key}. screens: ${screens.map((x) => x.label).join(" | ")}`)
+        return hit.screen
+      }
+      const STEP = "⚙ [bash"
+      // the tree opens with every turn of this two-turn session in detail (the last 3 stay open)
+      expect(before(5)).toContain(STEP)
+      expect(before(5)).not.toContain("▸ ")
+      // za on the first turn: its two steps leave their rows and are reported on the turn
+      expect(before(6)).toContain("● user: run the tool   ▸ 2 steps")
+      expect(before(6)).not.toContain(STEP)
+      // zr opens every fold, the hand-folded one included
+      expect(before(7)).toContain(STEP)
+      expect(before(7)).not.toContain("▸ ")
+      // zm folds them all: no step row left on screen, every turn carrying its digest
+      expect(before(8)).not.toContain(STEP)
+      expect(before(8)).toContain("● user: run the tool   ▸ 2 steps")
+      expect(before(8)).toContain("● user: second   ▸ 1 step")
+    } finally {
+      await toolMock.stop()
+      await proj.cleanup()
+    }
+  }, 300_000)
+
+  test("the g-prefixed verbs fire alongside gg", async () => {
+    // `gg` was the only sequence in the keymap; the realignment put every plugin verb behind
+    // `g`, so this proves the sequence tree branches rather than `gg` shadowing them
+    const m = await startMock({ tool: false })
+    const proj = await createProject({ mockPort: m.port })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    try {
+      const { screens } = await runTuiScreens({
+        projectDir: proj.dir,
+        keys: [
+          ["Ask anything", 1, "hello\r"],
+          ["mock reply", 8, "/tree"],
+          ["Context tree", 0.5, "\r"],
+          ["Context tree ·", 2, "gs"],
+          ["Context tree ·", 4, "gs"],
+          ["Context tree ·", 5.5, "gd"],
+          ["Context tree ·", 7, "gd"],
+          ["Context tree ·", 8.5, "gg"],
+          ["Context tree ·", 10, "q"],
+          ["Ask anything|mock reply", 1, "\x03"],
+          ["", 1, "\x03"],
+        ],
+        timeoutSec: 180,
+        cols: 130,
+        rows: 34,
+        exitWhenDone: true,
+      })
+      const seen = (needle: string) => screens.some((x) => x.screen.includes(needle))
+      // gs opens the consumers panel, gd the decisions panel — and gg still goes to the top
+      if (!seen("what's filling the context")) throw new Error(`gs never fired. screens: ${screens.map((x) => x.label).join(" | ")}`)
+      if (!seen("decisions on this tree")) throw new Error(`gd never fired. screens: ${screens.map((x) => x.label).join(" | ")}`)
+      // and the panels toggle back off, so the tree is still there afterwards
+      expect(seen("Context tree ·")).toBe(true)
     } finally {
       await m.stop()
       await proj.cleanup()

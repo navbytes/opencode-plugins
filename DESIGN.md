@@ -252,11 +252,43 @@ built-in `tui.json` keybinds table only covers OpenCode's own action names):
 
 - open: `ctrl+q` (matches `pi-context-tree`) — `<leader>t` suggested in README because
   many terminals eat `ctrl+q`.
-- inside the route: `↑↓`/`j k` move · `g G` top/bottom · `shift+↑↓`/`J K` jump 20 ·
-  `←→`/`h l` fold/unfold branch · `⏎` go here · `b` branch · `m` merge · `c` crop mark ·
-  `t` result⇄turn · `a` auto-mark · `x` undo · `i` inspector · `u` consumers ·
-  `D` decisions · `L` label · `/` search · `f` filter cycle · `1 2` lane x-axis ·
-  `y` copy · `e` expand branch inline · `q`/`esc` back.
+- inside the route: `↑↓`/`j k` move · `gg`/`G` top/bottom · `ctrl+f`/`ctrl+b` page ·
+  `ctrl+d`/`ctrl+u` half page · `H M L` screen top/middle/bottom · `{ }` turn rows ·
+  `[[ ]]` branch rows · `←→`/`h l`/`Tab` fold branch · `za zo zc zr zm zj zk` fold turns ·
+  `⏎` go here · `gb` branch · `gm` merge · `c` crop mark · `t` result⇄turn · `a` auto-mark ·
+  `u` undo · `i`/`I` inspector · `gs` consumers · `gd` decisions · `ge` export · `m` label
+  (mark) · `/ n N` search · `gf` filter · `g1 g2 g0` lane x-axis · `y` copy · `?` help ·
+  `q`/`esc` back.
+
+**Vim alignment.** The keymap should read native to a vim user, so a key means here what it
+means there. Already true: `j k`, `ctrl+d`/`ctrl+u`, `ctrl+f`/`ctrl+b`, `gg`, `G`, `{ }`
+(vim's paragraph motion, mapped onto turns — the unit the strip already rules), `[[ ]]`,
+`/ n N`, `y`, `u`. Turn folds take vim's fold vocabulary whole rather than inventing one:
+`za` toggle, `zo`/`zc` open/close, `zr`/`zm` open-all/close-all, `zj`/`zk` between folds
+(`h`/`l`/`Tab` stay as tree-explorer aliases). Two deliberate exceptions: `?` is help, not
+reverse search (`/` with `N` covers that, and `?` is universal in TUIs), and `q`/`esc` is back.
+
+*The realignment* (shipped as its own change, since it moves keys people had in their fingers;
+the CHANGELOG carries the same table and the `keybinds` config that restores the old
+spellings):
+
+| now | vim's meaning | becomes |
+|---|---|---|
+| `J` `K` jump 20 | join / keyword lookup | dropped — `ctrl+f`/`ctrl+b` and `}` cover it |
+| `x` undo alias | delete a character | dropped; `u` stays |
+| `0` `1` `2` lanes | digits are **counts** | `g0` `g1` `g2`, leaving bare digits free |
+| `L` label | bottom of the window | `m` (vim's *set mark*: a label is a bookmark), freeing `H M L` |
+| `m` merge | set mark | `gm` |
+| `e` toggle fold | end of word | dropped; `Tab` and `za` cover it |
+| `f` `F` filter | find character in line | `gf`; `filter_prev` keeps the command but loses its default key |
+
+The pattern behind the right-hand column is vim's own answer for verbs the language lacks:
+put them behind `g`, the way LSP plugins do (`gd`, `gr`, `gi`) — `gb` branch, `gm` merge,
+`gs` consumers, `gd` decisions, `ge` export — which frees the bare letters for real vim
+meanings. Lowercase throughout: this host's binding parser does not match a shifted *second*
+stroke, verified against the real TUI (`test/e2e/tui.test.ts` drives `gs`/`gd` alongside `gg`
+to pin that the sequence tree branches at all). Freeing `L` is what lets `H M L` mean the
+top, middle and bottom of the screen, as they do in vim.
 
 ---
 
@@ -318,6 +350,25 @@ after it in the current session is the abandoned tail (`core/actions.ts#abandone
 tested). A `fork` plan cuts the target spine *before* its boundary, because `session.fork`
 copies messages strictly before it. So redoing trunk turn 2 summarizes turns 2–3; switching
 from a branch to a sibling summarizes the branch's own turns and not the shared trunk.
+
+**Saying so while it happens.** Drafting a summary is the one thing in the plugin that waits
+on a model, and a wait nobody narrates reads as a hang — you press `⏎`, answer the question,
+and the tree sits there. Every step that waits on the server therefore reports through
+`ActionContext.progress` (`core/progress.ts` formats it, `tui/actions.ts#progressReporter`
+feeds it), and the tree's status line redraws it on a 120 ms interval:
+
+```
+⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s · esc cancels
+```
+
+— the stage in the dialog's own words, then the draft *as it streams*
+(`message.part.updated` on the helper session, reduced to the section the model is on and how
+much it has written), then an elapsed counter, then the way out. The counter and the spinner
+are what separate "still working" from "stuck": neither the label nor the section changes for
+seconds at a time. The stages are the same for a merge (`reading ⎇ x` → `drafting the ◆
+record` → `writing the ◆ record into trunk`), and a flow started from the palette, where there
+is no status line to redraw, gets one toast for the stage that waits on the model and silence
+for the sub-second ones.
 
 **Order of operations**, matching `navigateTree`: abort a streaming response first
 (`session.abort`, Pi #7022, so the summary covers the reply as it actually ended) → draft the
@@ -676,6 +727,38 @@ what the provider is really sent, so that estimate would be rough enough to misl
 labeled shows only `L`-labelled rows). `/` filters rows incrementally by role, tool
 name, label, and text — every token must match, like Pi. Folding state resets on
 filter change (as in Pi) and is otherwise remembered per session in `api.kv`.
+
+**Turn folds (`core/fold.ts`).** A turn whose model ran six tools costs seven rows and one of
+them is the skeleton you were skimming, so a turn collapses into its `●` row carrying what it
+swallowed: `● T7 add a retry to the flaky test   ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠`. Nothing escapes
+a fold — the digest is the whole story of what is inside it.
+
+*Posture.* `auto` (the default) keeps the **last 3 turns of the path you are on** open, so the
+far scrollback compresses while the end you are working at stays in detail; `zm` folds every
+turn, `zr` opens every one. Hand-folds (`za`, `zo`, `zc`) win over the posture and live in the
+route, not in `api.kv`: your folds hold while the tree is open and every visit starts from the
+same clean outline. Crop mode and an active search force everything open — crop marks live on
+the step rows, and a search that hid its own matches would read as broken.
+
+*Why a post-pass, not a branch in the emitter.* `buildTreeView` decides what *exists* (the
+`Filter`); folding decides what is *drawn now*. Keeping them apart is what lets the event strip
+stay complete while the rows collapse: `layoutEventStrip` is fed the transcript and the filter,
+never these rows, so the `Filter` remains the only "which events" control (§7.3) and the fold
+cannot gut the timeline it is supposed to complement. A folded turn's tokens roll into its row,
+so the column still totals; its digest counts what the *current filter* would have shown, so
+rows, digest and strip tell one story.
+
+*On the strip.* Selecting a folded turn lights every event it swallowed, across all three
+lanes — one collapsed row here, that span of pills there, its errors still red. That is what
+makes "nothing escapes the fold" safe: the row list stays clean, the timeline keeps the
+evidence.
+
+*Keys.* vim's fold vocabulary, since vim already has one: `za` toggle, `zo`/`zc` open/close,
+`zj`/`zk` between folds, and `zr`/`zm` for all-open/all-folded. vim spells the last pair
+`zR`/`zM`, but OpenCode's binding parser does not match a shifted second stroke (verified
+against the real TUI in `test/e2e/tui.test.ts`), and with a single fold level vim's own
+`zr`/`zm` — one level less/more folding — mean exactly the same thing here. `h`/`l`/`Tab`
+stay branch folds.
 
 **Lane width (0.2.4).** The strip is `width() + 2 - LANE_CHROME`: the terminal, minus the
 12-column lane label and the mode legend, plus the two columns a row spends on its `│ ` prefix

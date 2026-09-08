@@ -1,5 +1,112 @@
 # Changelog
 
+## Unreleased
+
+### Breaking: the keymap is now vim-aligned
+
+A key inside `/tree` should mean what it means in vim. Seven bindings did not, and they have
+moved. Every one is rebindable — the `keybinds` plugin option takes the command names below,
+so the old spellings can be restored verbatim (config at the end of this entry).
+
+| was | vim's meaning | is now |
+|---|---|---|
+| `J` `K` (jump 20 rows) | join / keyword lookup | **gone** — `ctrl+f`/`ctrl+b` page, `}`/`{` move by turn |
+| `x` (undo alias) | delete a character | **gone** — `u` still undoes |
+| `e` (toggle branch fold) | end of word | **gone** — `Tab` and `h`/`l` still fold |
+| `0` `1` `2` (lanes) | digits are **counts** | `g0` `g1` `g2` |
+| `L` (label) | bottom of the screen | `m` — vim's *set mark*, which is what a label is |
+| `m` (merge) | set mark | `gm` |
+| `b` (branch) · `s` (consumers) · `D` (decisions) · `E` (export) · `f` (filter) | word motions, substitute, delete-to-EOL, find-char | `gb` · `gs` · `gd` · `ge` · `gf` |
+
+`F` (filter step-back) loses its default key: every free single stroke is a vim motion, and
+the picker on `gf` selects any filter directly. The command stays, so `keybinds` can give it
+one.
+
+Freeing `L` lets **`H` `M` `L`** mean what they do in vim — the top, middle and bottom row of
+what is on screen. The verbs behind `g` follow vim's own answer for words the language lacks,
+the way LSP plugins do it (`gd`, `gr`, `gi`). Lowercase throughout, because OpenCode's binding
+parser does not match a shifted second stroke (`gD` never fires; verified against the real TUI,
+which is also why the fold keys below are `zr`/`zm` rather than vim's `zR`/`zM`).
+
+Two keys stay deliberately un-vim: `?` is help, not reverse search (`/` with `N` covers that,
+and `?` is universal in TUIs), and `q`/`esc` is back.
+
+To keep the old keys, in `opencode.json`:
+
+```json
+{
+  "plugin": {
+    "opencode-context-tree": {
+      "keybinds": {
+        "branch": "b", "merge": "m", "label": "shift+l", "consumers": "s",
+        "decisions": "shift+d", "export": "shift+e", "filter_pick": "f",
+        "filter_prev": "shift+f", "mode_duration": "1", "mode_turns": "2",
+        "lanes_off": "0", "toggle": "tab,e", "undo": "u,x"
+      }
+    }
+  }
+}
+```
+
+- **Turns fold.** A turn whose model ran six tools was seven rows in the outline, one of which
+  was the `●` you were actually skimming for. Turns older than the last three on your path now
+  open folded, carrying what they hold — `● T5 add a retry to the flaky test   ▸ 6 steps ·
+  ~12k · 1 ✗ · 2 ⚠` — and nothing escapes the fold: the digest is the whole story of what is
+  inside it (steps, their tokens, and how many were errors, ≥10k or already cropped).
+
+  Folding uses vim's own fold keys: `za` toggles the turn the cursor is in (from a step row,
+  the turn that owns it, and the cursor rides up to it), `zo`/`zc` open and close, `zj`/`zk`
+  move between folds, and `zr`/`zm` open every fold / fold every turn. `zm` is the pure
+  outline — one row per turn. Hand-folds beat the last-three rule and last while the tree is
+  open, so every visit starts from the same clean outline; `h`/`l`/`Tab` still fold branches.
+
+  Two things stay out of the fold's way. **Crop mode opens everything** (marks live on the step
+  rows) and restores your folds on the way out, as does a live `/` search — a search that hid
+  its own matches would read as broken. And **the timeline keeps every event**: folding thins
+  the rows, never the lanes, so the `Filter` remains the only "which events" control and a
+  folded turn lights the whole span it stands for when you select it, errors still red. Fold
+  the rows, read the shape on the strip.
+
+- **The keymap is being aligned with vim**, so a key means here what it means there. This
+  release adds the spellings that were simply missing, none of which displaces an existing
+  binding: `ctrl+f` / `ctrl+b` page the row list, and `[[` / `]]` join `[` / `]` on branch
+  rows (vim's section motion). `{` / `}` below are the same idea. A realignment of the keys
+  that *conflict* with vim — `J`/`K`, the `x` undo alias, `0`/`1`/`2` for the lanes, `L`
+  label, `m` merge, `e`, `f`/`F` — is planned as its own release, with an old → new table
+  and the `keybinds` config to restore the old spellings; the table is in DESIGN.md §5.
+
+- **`{` and `}` move by turn.** The outline's unit is the `●` turn, but until now nothing
+  moved by it: `j`/`k` walked rows one tool call at a time and `J`/`K` jumped a blind 20. The
+  new motions land on the previous/next turn row, and from a step row `{` lands on the turn
+  that owns it before moving on — the way `{` in vim leaves the paragraph you are inside. With
+  the lanes on they double as a timeline scrubber, since the event strip already draws its
+  rules at turn boundaries. Overridable like every other key (`keybinds: { next_turn: … }`).
+
+- **The flows that wait on a model now say so while they wait.** Drafting a branch summary
+  (`⏎` → *Summarize…*) or a ◆ decision record (`/merge` → *Squash*) takes a model call, and
+  until now the tree simply sat there until the result appeared. The status line now carries a
+  live line for the whole wait — `⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s ·
+  esc cancels` — redrawn every 120 ms, so the spinner and the elapsed counter separate "still
+  working" from "stuck".
+
+  The middle of that line is the **model's own draft as it streams in** (`message.part.updated`
+  on the helper session): the section it is writing and how much of it there is. The steps
+  around the model call are named too — `forking the new branch`, `writing the ≣ summary into
+  ⎇ try-redis`, `reading ⎇ try-redis`, `writing the ◆ record into trunk` — and `esc` during a
+  draft now reads `cancelling the branch summary` until the flow has actually unwound.
+
+  Run one of these from the palette rather than the tree (`/merge` from a session, with no
+  route open and so no status line to redraw) and the step that waits on the model becomes a
+  toast; the sub-second server steps stay quiet instead of stacking toasts.
+
+- The one-shot "summarizing … — esc to skip" notice this replaces could outlive the work it
+  described (it was written once, with a two-minute timeout, and nothing cleared it if the
+  draft failed early). Progress is now state, cleared on every path out of the flow.
+
+- `draftBranchSummary` and the ◆ record draft now share one `draftWithHelper`, so cancellation
+  (`esc` aborts the helper session's reply) and the streaming progress hook exist once rather
+  than in one of the two flows.
+
 ## 0.2.7 — 2026-09-07
 
 Documentation only — no behaviour changed. This release exists to get the rewritten README
