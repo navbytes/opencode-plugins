@@ -206,9 +206,9 @@ Vim-aligned, inside `/tree`. Press `?` for the full list without leaving the scr
 
 | Key | Action |
 |---|---|
-| `j` `k` · `ctrl+d` `ctrl+u` · `gg` `G` | move · half page · top / bottom |
+| `j` `k` · `ctrl+f` `ctrl+b` · `ctrl+d` `ctrl+u` · `gg` `G` | move · page · half page · top / bottom |
 | `{` `}` | previous / next turn row — the outline's own unit; the lanes scrub with it |
-| `[` `]` | previous / next branch row |
+| `[[` `]]` (or `[` `]`) | previous / next branch row |
 | `h` `l` · `Tab` | fold / unfold a branch inline |
 | `⏎` | go here — the footer names what it will do for this row |
 | `b` | branch here, naming it and optionally picking a model |

@@ -152,11 +152,14 @@ const DEFAULT_KEYS: Record<string, string[]> = {
   jump_down: ["shift+down", "shift+j"],
   half_up: ["ctrl+u"],
   half_down: ["ctrl+d"],
+  page_up: ["ctrl+b"],
+  page_down: ["ctrl+f"],
   // a sequence, so bare `g` is free (and never fires on its own)
   first: ["gg"],
   last: ["shift+g"],
-  prev_branch: ["["],
-  next_branch: ["]"],
+  // `[[` / `]]` is vim's section motion; the single-bracket spellings stay as aliases
+  prev_branch: ["[[", "["],
+  next_branch: ["]]", "]"],
   prev_turn: ["{"],
   next_turn: ["}"],
   fold: ["left", "h"],
@@ -206,8 +209,8 @@ const NO_BRANCHES = "No branches yet · b forks here into a real OpenCode sessio
 const HELP = [
   `? help · ? or esc closes · opencode-context-tree ${PLUGIN_VERSION}`,
   "Move",
-  "  ↑↓ j k · J K by 20 · ctrl+d ctrl+u half page · gg top · G bottom",
-  "  { } turn rows (the lanes scrub with them) · [ ] branch rows",
+  "  ↑↓ j k · J K by 20 · ctrl+f ctrl+b page · ctrl+d ctrl+u half page · gg top · G bottom",
+  "  { } turn rows (the lanes scrub with them) · [[ ]] (or [ ]) branch rows",
   "  h l ← → fold/unfold a branch · Tab (or e) toggle · / live search · n N next/prev match",
   "Act",
   "  ⏎ go — a ⎇ header switches to it · a user turn forks & prefills it · a step forks after it",
@@ -1294,6 +1297,14 @@ export function TreeRoute(props: TreeRouteProps) {
     setSelected((i) => moveSelection(view().rows, i, delta))
   }
 
+  /** `ctrl+f` / `ctrl+b`: a whole screen, vim's page motion. One row of overlap, as vim
+   *  leaves, so the line you were reading is still there to orient by. */
+  function page(dir: 1 | -1) {
+    const rows = Math.max(1, height() - 1)
+    if (panel() === "decisions") setDecisionScroll((sc) => Math.max(0, sc + dir * rows))
+    else moveIndex(dir * rows)
+  }
+
   function halfPage(dir: 1 | -1) {
     const half = Math.max(1, Math.floor(height() / 2))
     // in the decisions panel a half page scrolls the open record, not the record list
@@ -1375,6 +1386,8 @@ export function TreeRoute(props: TreeRouteProps) {
       { name: "ctree.jump_down", hidden: true, enabled: treePanel, run: () => moveIndex(20) },
       { name: "ctree.half_up", hidden: true, run: () => halfPage(-1) },
       { name: "ctree.half_down", hidden: true, run: () => halfPage(1) },
+      { name: "ctree.page_up", hidden: true, run: () => page(-1) },
+      { name: "ctree.page_down", hidden: true, run: () => page(1) },
       { name: "ctree.first", hidden: true, run: () => gotoEdge(-1) },
       { name: "ctree.last", hidden: true, run: () => gotoEdge(1) },
       { name: "ctree.prev_branch", hidden: true, enabled: treePanel, run: () => setSelected((i) => nextBranchIndex(view().rows, i, -1)) },

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **The keymap is being aligned with vim**, so a key means here what it means there. This
+  release adds the spellings that were simply missing, none of which displaces an existing
+  binding: `ctrl+f` / `ctrl+b` page the row list, and `[[` / `]]` join `[` / `]` on branch
+  rows (vim's section motion). `{` / `}` below are the same idea. A realignment of the keys
+  that *conflict* with vim — `J`/`K`, the `x` undo alias, `0`/`1`/`2` for the lanes, `L`
+  label, `m` merge, `e`, `f`/`F` — is planned as its own release, with an old → new table
+  and the `keybinds` config to restore the old spellings; the table is in DESIGN.md §5.
+
 - **`{` and `}` move by turn.** The outline's unit is the `●` turn, but until now nothing
   moved by it: `j`/`k` walked rows one tool call at a time and `J`/`K` jumped a blind 20. The
   new motions land on the previous/next turn row, and from a step row `{` lands on the turn

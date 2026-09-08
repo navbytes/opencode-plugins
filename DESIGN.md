@@ -258,6 +258,33 @@ built-in `tui.json` keybinds table only covers OpenCode's own action names):
   `D` decisions · `L` label · `/` search · `f` filter cycle · `1 2` lane x-axis ·
   `y` copy · `e` expand branch inline · `q`/`esc` back.
 
+**Vim alignment.** The keymap should read native to a vim user, so a key means here what it
+means there. Already true: `j k`, `ctrl+d`/`ctrl+u`, `ctrl+f`/`ctrl+b`, `gg`, `G`, `{ }`
+(vim's paragraph motion, mapped onto turns — the unit the strip already rules), `[[ ]]`,
+`/ n N`, `y`, `u`. Turn folds take vim's fold vocabulary whole rather than inventing one:
+`za` toggle, `zo`/`zc` open/close, `zR`/`zM` open-all/close-all, `zj`/`zk` between folds
+(`h`/`l`/`Tab` stay as tree-explorer aliases). Two deliberate exceptions: `?` is help, not
+reverse search (`/` with `N` covers that, and `?` is universal in TUIs), and `q`/`esc` is back.
+
+*Planned realignment*, deferred to its own release because it moves keys people have in their
+fingers — the CHANGELOG will carry the old → new table and the `keybinds` config that restores
+the old spellings:
+
+| now | vim's meaning | becomes |
+|---|---|---|
+| `J` `K` jump 20 | join / keyword lookup | dropped — `ctrl+f`/`ctrl+b` and `}` cover it |
+| `x` undo alias | delete a character | dropped; `u` stays |
+| `0` `1` `2` lanes | digits are **counts** | `g0` `g1` `g2`, leaving bare digits free |
+| `L` label | bottom of the window | `m` (vim's *set mark*: a label is a bookmark), freeing `H M L` |
+| `m` merge | set mark | `gm` |
+| `e` toggle fold | end of word | dropped; `Tab` and `za` cover it |
+| `f` `F` filter | find character in line | `gf` |
+
+The pattern behind the right-hand column is vim's own answer for verbs the language lacks:
+put them behind `g`, the way LSP plugins do (`gd`, `gr`, `gi`) — `gb` branch, `gm` merge,
+`gs` consumers, `gD` decisions, `gE` export — which frees the bare letters for real vim
+meanings.
+
 ---
 
 ## 6. Flows, from the user's chair
