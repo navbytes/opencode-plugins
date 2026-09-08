@@ -80,9 +80,23 @@ The option lines say how much you are leaving — `drop the 3 turns · ~14k belo
 the point the two paths share, so redoing trunk turn 2 summarizes turns 2–3, while switching
 from a branch to a sibling summarizes the branch's own turns and not the shared trunk.
 
+While the summary is drafting, the status line says so — and keeps saying so:
+
+```
+⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s · esc cancels
+```
+
+The spinner and the seconds counter mean it is still running; `Progress · 1.2k chars` is the
+model's own draft as it arrives — the section it is writing and how much of it there is. The
+same line covers the steps after it (`writing the ≣ summary into ⎇ try-redis`) and the merge
+draft (`drafting the ◆ record for ⎇ try-redis`). Run one of these from the palette instead of
+the tree — `/merge` from a session — and there is no status line to redraw, so you get a toast
+naming the step instead.
+
 `esc` on the choices puts you back on the same row with nothing done; `esc` while the summary
 is being drafted cancels the draft *and* the move — nothing is forked until the summary is
-ready. A summary that fails outright never blocks the move: you get a notice and go anyway.
+ready, and the line reads `cancelling the branch summary` until it has unwound. A summary that
+fails outright never blocks the move: you get a notice and go anyway.
 Set `jumpSummary: "never"` for a plain confirm instead (the pure `pi-context-tree` stance);
 a jump with nothing below the selected point skips the question too.
 

@@ -319,6 +319,25 @@ tested). A `fork` plan cuts the target spine *before* its boundary, because `ses
 copies messages strictly before it. So redoing trunk turn 2 summarizes turns 2–3; switching
 from a branch to a sibling summarizes the branch's own turns and not the shared trunk.
 
+**Saying so while it happens.** Drafting a summary is the one thing in the plugin that waits
+on a model, and a wait nobody narrates reads as a hang — you press `⏎`, answer the question,
+and the tree sits there. Every step that waits on the server therefore reports through
+`ActionContext.progress` (`core/progress.ts` formats it, `tui/actions.ts#progressReporter`
+feeds it), and the tree's status line redraws it on a 120 ms interval:
+
+```
+⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s · esc cancels
+```
+
+— the stage in the dialog's own words, then the draft *as it streams*
+(`message.part.updated` on the helper session, reduced to the section the model is on and how
+much it has written), then an elapsed counter, then the way out. The counter and the spinner
+are what separate "still working" from "stuck": neither the label nor the section changes for
+seconds at a time. The stages are the same for a merge (`reading ⎇ x` → `drafting the ◆
+record` → `writing the ◆ record into trunk`), and a flow started from the palette, where there
+is no status line to redraw, gets one toast for the stage that waits on the model and silence
+for the sub-second ones.
+
 **Order of operations**, matching `navigateTree`: abort a streaming response first
 (`session.abort`, Pi #7022, so the summary covers the reply as it actually ended) → draft the
 summary while *nothing has moved yet* → fork or switch → inject. Drafting first is what makes

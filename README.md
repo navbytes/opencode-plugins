@@ -119,6 +119,11 @@ one question with Pi's three answers — fork clean, summarize everything below 
 or summarize it with your own prompt — and the answer is also the confirmation. The
 summary covers exactly the turns the move leaves behind.
 
+Drafting one takes a model call, so the status line shows it happening —
+`⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s · esc cancels`: the step, the
+draft as it streams in, how long it has been, and the way out. The `◆` record a `/merge`
+drafts reports the same way.
+
 ## The screen
 
 `/tree` is an outline of the whole session. Every message and tool call is one

@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+- **The flows that wait on a model now say so while they wait.** Drafting a branch summary
+  (`⏎` → *Summarize…*) or a ◆ decision record (`/merge` → *Squash*) takes a model call, and
+  until now the tree simply sat there until the result appeared. The status line now carries a
+  live line for the whole wait — `⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s ·
+  esc cancels` — redrawn every 120 ms, so the spinner and the elapsed counter separate "still
+  working" from "stuck".
+
+  The middle of that line is the **model's own draft as it streams in** (`message.part.updated`
+  on the helper session): the section it is writing and how much of it there is. The steps
+  around the model call are named too — `forking the new branch`, `writing the ≣ summary into
+  ⎇ try-redis`, `reading ⎇ try-redis`, `writing the ◆ record into trunk` — and `esc` during a
+  draft now reads `cancelling the branch summary` until the flow has actually unwound.
+
+  Run one of these from the palette rather than the tree (`/merge` from a session, with no
+  route open and so no status line to redraw) and the step that waits on the model becomes a
+  toast; the sub-second server steps stay quiet instead of stacking toasts.
+
+- The one-shot "summarizing … — esc to skip" notice this replaces could outlive the work it
+  described (it was written once, with a two-minute timeout, and nothing cleared it if the
+  draft failed early). Progress is now state, cleared on every path out of the flow.
+
+- `draftBranchSummary` and the ◆ record draft now share one `draftWithHelper`, so cancellation
+  (`esc` aborts the helper session's reply) and the streaming progress hook exist once rather
+  than in one of the two flows.
+
 ## 0.2.7 — 2026-09-07
 
 Documentation only — no behaviour changed. This release exists to get the rewritten README

@@ -14,8 +14,9 @@ import { buildSpineMap, buildTreeView, currentChainOf, formatPromptAt, promptAtR
 import { ContextGauge } from "./gauge.js"
 import type { Transcript } from "../core/transcript.js"
 import type { JournalStore } from "../shared/store.js"
-import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyText, createNamedBranch, describeTail, executeJump, executeUndo, jumpDialogOptions, jumpDialogTitle, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, MERGE_TRUST, setLabel, UNDO_KEY, type ActionContext, type MergeMode, type SummaryChoice } from "./actions.js"
+import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyText, createNamedBranch, executeJump, executeUndo, jumpDialogOptions, jumpDialogTitle, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, MERGE_TRUST, setLabel, UNDO_KEY, type ActionContext, type MergeMode, type SummaryChoice } from "./actions.js"
 import { decisionSummary, exportDecisions, renderDecision } from "../core/decision.js"
+import { formatProgress, SPINNER_MS, type ProgressState } from "../core/progress.js"
 import { laneLabel, laneSuffix, layoutEventStrip, overviewTrack, stripIndexFor, windowFor, LANE_CHROME, type LaneMode, type StripCell } from "../core/lanes.js"
 import { bar, consumers, type Consumer, type ConsumerEntry } from "../core/consumers.js"
 import { hasEditor } from "./editor.js"
@@ -259,6 +260,14 @@ export function TreeRoute(props: TreeRouteProps) {
   const [selected, setSelected] = createSignal(0)
   const [others, setOthers] = createSignal<Record<string, Transcript>>({})
   const [busy, setBusy] = createSignal<string | undefined>()
+  /** The step a slow action is on, redrawn every frame while it runs (`ctx.progress`). */
+  const [progress, setProgress] = createSignal<ProgressState | undefined>()
+  /** Ticks the clock the progress line reads, so its spinner turns and its counter climbs
+   *  while we are inside an `await` that publishes nothing of its own. */
+  const [frame, setFrame] = createSignal(0)
+  /** When `esc` asked to cancel a draft: the line says so until the flow actually unwinds,
+   *  which takes as long as the abort takes to reach the server. */
+  const [cancelling, setCancelling] = createSignal<number | undefined>()
   /** Set while a jump is drafting its branch summary: `esc` cancels the draft, and with it the
    *  jump — nothing has been forked or switched yet (Pi's `abortBranchSummary`). */
   const [summaryAbort, setSummaryAbort] = createSignal<AbortController | undefined>()
@@ -292,7 +301,31 @@ export function TreeRoute(props: TreeRouteProps) {
     noticeTimer = setTimeout(() => setNotice(undefined), ms)
   }
   onCleanup(() => clearTimeout(noticeTimer))
-  const ctx: ActionContext = { api, store, directory, notify }
+
+  /** A step's live line: a new label restarts the elapsed counter, the same label keeps it
+   *  (a streaming draft refreshes the state many times a second), `undefined` clears it. */
+  const reportProgress = (state: Omit<ProgressState, "startedAt"> | undefined) => {
+    if (!state) {
+      setProgress(undefined)
+      setCancelling(undefined)
+      return
+    }
+    const open = progress()
+    setProgress({ ...state, startedAt: open && open.label === state.label ? open.startedAt : Date.now() })
+  }
+  const ctx: ActionContext = { api, store, directory, notify, progress: reportProgress }
+
+  // one interval for as long as something is running, rather than a permanently ticking route
+  createEffect(
+    on(
+      () => progress() !== undefined,
+      (running) => {
+        if (!running) return
+        const timer = setInterval(() => setFrame((n) => n + 1), SPINNER_MS)
+        onCleanup(() => clearInterval(timer))
+      },
+    ),
+  )
 
   const state = createMemo<TreeState>(() => {
     tick()
@@ -1073,13 +1106,10 @@ export function TreeRoute(props: TreeRouteProps) {
     if (!choice) return
     await guarded("jump", async () => {
       const controller = new AbortController()
-      const summarizing = choice.kind === "summarize"
-      if (summarizing) {
-        setSummaryAbort(controller)
-        notify(`summarizing ${describeTail(tail)} below this point — esc to skip`, 120_000)
-      }
+      // `esc` reaches the draft through this controller; executeJump reports the stages
+      if (choice.kind === "summarize") setSummaryAbort(controller)
       try {
-        const out = await executeJump(ctx, plan, { currentSessionID: sessionID!, summary: choice, abandoned: tail.messages, signal: controller.signal })
+        const out = await executeJump(ctx, plan, { currentSessionID: sessionID!, summary: choice, abandoned: tail, signal: controller.signal })
         if (out.aborted) {
           notify("summary cancelled — nothing moved")
           return
@@ -1429,7 +1459,8 @@ export function TreeRoute(props: TreeRouteProps) {
           if (draft) {
             draft.abort()
             setSummaryAbort(undefined)
-            notify("cancelling the branch summary…")
+            if (progress()) setCancelling(Date.now())
+            else notify("cancelling the branch summary…")
             return
           }
           if (showInspectorFull() && inspectorFull()) {
@@ -1512,6 +1543,13 @@ export function TreeRoute(props: TreeRouteProps) {
       return `✂ crop mode (${cropMode()}) · space mark · a auto · t result⇄turn · ⏎ apply · esc leave · marked ${selectedCandidates().length} ~${formatK(reclaimed(selectedCandidates()))}${a ? " · armed — space again to override" : ""}`
     }
     if (searchMode()) return `search: ${search()}▏ · ${pos} rows · ⏎ keeps it · esc clears`
+    // a step in flight owns the line: it is the only thing on screen that is still changing
+    const running = progress()
+    if (running) {
+      frame()
+      const stopping = cancelling()
+      return clipTo(formatProgress(stopping === undefined ? running : { label: "cancelling the branch summary", startedAt: stopping }, Date.now()), cols())
+    }
     const said = notice()
     if (said) return `${clipTo(said, cols())}   ${pos} rows`
     const left = `filter: ${filter()}${search() ? `   search: "${search()}"` : ""}${busy() ? `   … ${busy()}` : ""}   ${pos} rows`

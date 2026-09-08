@@ -16,6 +16,7 @@ import { contextSizeOf, formatK, type MinimalMessage } from "../core/tokens.js"
 import { DECISION_SYSTEM, branchTranscriptText, transcriptText, buildDecisionDraftPrompt, decisionMessageText, decisionRecord, decisionTemplate, openSiblings, templatePlaceholders } from "../core/decision.js"
 import { editInExternalEditor, hasEditor } from "./editor.js"
 import { debug } from "../shared/debug.js"
+import { draftDetail, type ProgressState } from "../core/progress.js"
 import { fetchTranscript } from "./transcripts.js"
 
 export type JumpPlan =
@@ -30,6 +31,10 @@ export type ActionContext = {
   /** Route-level feedback (the tree route's status line, `notify` in route.tsx); a caller
    *  without one — the palette, with no route open — falls back to `api.ui.toast` below. */
   notify?: (message: string, ms?: number) => void
+  /** Live status for a step that takes seconds (any of the LLM-backed flows): the tree route
+   *  paints it as a spinner with an elapsed counter and clears it on `undefined`. A caller
+   *  without one gets one toast per stage instead (`progressReporter`). */
+  progress?: (state: Omit<ProgressState, "startedAt"> | undefined) => void
 }
 
 export type SummaryChoice = { kind: "none" } | { kind: "summarize"; customInstructions?: string }
@@ -59,6 +64,78 @@ function record<T extends JournalEntry["type"]>(ctx: ActionContext, treeId: stri
 function notify(ctx: ActionContext, input: TuiToast): void {
   if (ctx.notify) ctx.notify(input.message, input.duration)
   else ctx.api.ui.toast(input)
+}
+
+/** How long a stage toast stands on a surface that cannot redraw a live line. Long, because
+ *  the only stages that reach it are the ones that wait on a model. */
+const STAGE_TOAST_MS = 30_000
+
+/** Floor between two `detail` redraws. A streaming reply can update many times a second and
+ *  every update repaints the whole route, so the live half is refreshed at about the rate the
+ *  spinner turns — fast enough to read as live, cheap enough to run under a model call. */
+const DETAIL_MS = 100
+
+/** What a slow flow reports as it runs. `stage` names the step (and restarts its counter),
+ *  `detail` refreshes it with the model's own draft, `done` clears the line. A `quiet` stage
+ *  is drawn on a live line but never toasted: a round trip to the server is over before a
+ *  toast would have finished animating in. */
+export type ProgressReporter = {
+  stage: (label: string, opts?: { hint?: string; quiet?: boolean }) => void
+  detail: (draft: string) => void
+  done: () => void
+}
+
+/**
+ * Progress for the flows that wait on a model. With a route, every call redraws one live line
+ * (spinner, elapsed, and the section the model is writing); without one — the palette, no
+ * route open — the stages that actually take time become a toast each, and the streaming
+ * `detail` is dropped rather than firing a toast per token.
+ */
+function progressReporter(ctx: ActionContext): ProgressReporter {
+  let label: string | undefined
+  let hint: string | undefined
+  let lastDetailAt = 0
+  return {
+    stage(next, opts) {
+      label = next
+      hint = opts?.hint
+      lastDetailAt = 0
+      debug("progress.stage", { label: next })
+      if (ctx.progress) ctx.progress({ label: next, hint })
+      else if (!opts?.quiet) ctx.api.ui.toast({ message: hint ? `${next}… (${hint})` : `${next}…`, duration: STAGE_TOAST_MS })
+    },
+    detail(draft) {
+      if (!label || !ctx.progress) return
+      const now = Date.now()
+      if (now - lastDetailAt < DETAIL_MS) return
+      lastDetailAt = now
+      ctx.progress({ label, hint, detail: draftDetail(draft) })
+    },
+    done() {
+      label = undefined
+      hint = undefined
+      ctx.progress?.(undefined)
+    },
+  }
+}
+
+/**
+ * The helper session's reply as it streams, for the progress line. `message.part.updated`
+ * carries the whole part on every delta, so we keep the latest text of each and join them —
+ * the same concatenation the finished reply gets read with, a few hundred milliseconds early.
+ *
+ * The bus is optional at runtime (an `api` built for a test has none), so a surface without
+ * it simply shows the stage without its live half.
+ */
+function streamHelperText(ctx: ActionContext, sessionID: string, onText: (text: string) => void): () => void {
+  const parts = new Map<string, string>()
+  const off = ctx.api.event?.on?.("message.part.updated", (event) => {
+    const part = event.properties?.part as { id?: string; sessionID?: string; type?: string; text?: string; synthetic?: boolean; ignored?: boolean } | undefined
+    if (!part?.id || part.sessionID !== sessionID || part.type !== "text" || part.synthetic || part.ignored) return
+    parts.set(part.id, typeof part.text === "string" ? part.text : "")
+    onText([...parts.values()].join(""))
+  })
+  return off ?? (() => {})
 }
 
 const SUMMARY_SYSTEM =
@@ -206,9 +283,9 @@ export async function createNamedBranch(
 export async function executeJump(
   ctx: ActionContext,
   plan: JumpPlan,
-  opts: { currentSessionID: string; summary: SummaryChoice; abandoned?: readonly TranscriptMessage[]; signal?: AbortSignal },
+  opts: { currentSessionID: string; summary: SummaryChoice; abandoned?: AbandonedTail; signal?: AbortSignal },
 ): Promise<JumpOutcome> {
-  debug("jump.plan", { plan, current: opts.currentSessionID, summary: opts.summary.kind, abandoned: opts.abandoned?.length ?? 0 })
+  debug("jump.plan", { plan, current: opts.currentSessionID, summary: opts.summary.kind, abandoned: opts.abandoned?.messages.length ?? 0 })
   if (plan.kind === "noop") {
     notify(ctx, { message: plan.reason })
     return {}
@@ -218,45 +295,63 @@ export async function executeJump(
   // summarizes, so the summary covers the reply as it actually ended (interactive-mode.ts).
   await abortIfBusy(ctx, opts.currentSessionID)
   const leavingTip = ctx.api.state.session.messages(opts.currentSessionID).at(-1)?.id
-  const wanted = opts.summary.kind === "summarize" && (opts.abandoned?.length ?? 0) > 0
+  const abandoned = opts.abandoned?.messages ?? []
+  const wanted = opts.summary.kind === "summarize" && abandoned.length > 0
 
-  let summary: string | undefined
-  let summaryNotice: TuiToast | undefined
-  if (wanted) {
-    try {
-      summary = await draftBranchSummary(ctx, { messages: opts.abandoned ?? [], customInstructions: opts.summary.kind === "summarize" ? opts.summary.customInstructions : undefined, signal: opts.signal })
-    } catch (e) {
-      if (opts.signal?.aborted) {
-        debug("jump.summary.aborted", {})
-        return { aborted: true }
+  // Every step below this line waits on the server, and the summary waits on a model: the
+  // report is what keeps the tree from looking frozen for those seconds (DESIGN.md §6.2).
+  const report = progressReporter(ctx)
+  try {
+    let summary: string | undefined
+    let summaryNotice: TuiToast | undefined
+    if (wanted) {
+      report.stage(`summarizing ${opts.abandoned ? describeTail(opts.abandoned) : plural(abandoned.length, "message")}`, { hint: "esc cancels" })
+      try {
+        summary = await draftBranchSummary(ctx, { messages: abandoned, customInstructions: opts.summary.kind === "summarize" ? opts.summary.customInstructions : undefined, signal: opts.signal, onDraft: report.detail })
+      } catch (e) {
+        if (opts.signal?.aborted) {
+          debug("jump.summary.aborted", {})
+          return { aborted: true }
+        }
+        summaryNotice = { variant: "error", message: `summary failed: ${e instanceof Error ? e.message : String(e)} — moved without it` }
       }
-      summaryNotice = { variant: "error", message: `summary failed: ${e instanceof Error ? e.message : String(e)} — moved without it` }
+      if (opts.signal?.aborted) return { aborted: true }
     }
-    if (opts.signal?.aborted) return { aborted: true }
-  }
 
-  let target: string
-  if (plan.kind === "switch") {
-    target = plan.sessionID
-  } else {
-    target = await forkBranch(ctx, { sessionID: plan.sessionID, messageID: plan.messageID, kind: plan.mode === "redo" ? "redo" : "jump" })
-  }
+    let target: string
+    if (plan.kind === "switch") {
+      target = plan.sessionID
+    } else {
+      report.stage("forking the new branch", { quiet: true })
+      target = await forkBranch(ctx, { sessionID: plan.sessionID, messageID: plan.messageID, kind: plan.mode === "redo" ? "redo" : "jump" })
+    }
 
-  if (summary && target !== opts.currentSessionID) {
-    await injectBranchSummary(ctx, { summary, targetSessionID: target, fromSessionID: opts.currentSessionID, fromMessageID: leavingTip ?? "" })
-      .then(() => (summaryNotice = { variant: "success", message: "Branch summary added" }))
-      .catch((e) => (summaryNotice = { variant: "error", message: `summary failed: ${e instanceof Error ? e.message : String(e)} — moved without it` }))
-  }
+    if (summary && target !== opts.currentSessionID) {
+      report.stage(`writing the ≣ summary into ${sessionLabel(ctx, target)}`, { quiet: true })
+      await injectBranchSummary(ctx, { summary, targetSessionID: target, fromSessionID: opts.currentSessionID, fromMessageID: leavingTip ?? "" })
+        .then(() => (summaryNotice = { variant: "success", message: "Branch summary added" }))
+        .catch((e) => (summaryNotice = { variant: "error", message: `summary failed: ${e instanceof Error ? e.message : String(e)} — moved without it` }))
+    }
 
-  debug("jump.navigate", { target })
-  navigateToSession(ctx, target)
-  // the route has unmounted by now, so this always goes through the toast, not ctx.notify
-  if (summaryNotice) ctx.api.ui.toast(summaryNotice)
-  if (plan.kind === "fork" && plan.prefill) {
-    await new Promise((r) => setTimeout(r, 0))
-    await ctx.api.client.tui.appendPrompt({ text: plan.prefill, directory: ctx.directory }).catch(() => undefined)
+    debug("jump.navigate", { target })
+    navigateToSession(ctx, target)
+    // the route has unmounted by now, so this always goes through the toast, not ctx.notify
+    if (summaryNotice) ctx.api.ui.toast(summaryNotice)
+    if (plan.kind === "fork" && plan.prefill) {
+      await new Promise((r) => setTimeout(r, 0))
+      await ctx.api.client.tui.appendPrompt({ text: plan.prefill, directory: ctx.directory }).catch(() => undefined)
+    }
+    return { target }
+  } finally {
+    report.done()
   }
-  return { target }
+}
+
+/** A session as a progress line should name it: its branch name when the journal has one,
+ *  else the session's own title (`branchLabel`'s fallback) — never a bare id. */
+function sessionLabel(ctx: ActionContext, sessionID: string): string {
+  const name = ctx.store.stateForSession(sessionID)?.sessions[sessionID]?.name
+  return name ? `⎇ ${clip(name, 24)}` : branchLabel(ctx.api, sessionID, undefined, 24)
 }
 
 /** What `⏎` is about to do to the selected row — Pi asks only "Summarize branch?", but the
@@ -296,42 +391,26 @@ export function jumpDialogOptions(tail: AbandonedTail, kind: "fork" | "switch"):
  * session that is deleted again (no provider keys of our own; DESIGN.md §6.2).
  *
  * `signal` is honoured between steps and aborts the helper session's in-flight reply, so
- * `esc` in the tree gets out of a slow summarizer.
+ * `esc` in the tree gets out of a slow summarizer; `onDraft` reports the reply as it streams,
+ * so the wait is visible while it happens (`draftWithHelper`).
  */
 export async function draftBranchSummary(
   ctx: ActionContext,
-  input: { messages: readonly TranscriptMessage[]; customInstructions?: string; signal?: AbortSignal },
+  input: { messages: readonly TranscriptMessage[]; customInstructions?: string; signal?: AbortSignal; onDraft?: (text: string) => void },
 ): Promise<string> {
   const transcript = transcriptText(input.messages, 400)
   if (!transcript.trim()) throw new Error("nothing to summarize")
   debug("summary.start", { messages: input.messages.length, chars: transcript.length })
-  if (input.signal?.aborted) throw new Error("aborted")
-  const helper = await ctx.api.client.session.create({ directory: ctx.directory, title: "Context tree: branch summary" })
-  const helperID = (helper.data as any)?.id as string | undefined
-  if (!helperID) throw new Error("could not create helper session")
-  const stop = () => void ctx.api.client.session.abort({ sessionID: helperID, directory: ctx.directory }).catch(() => undefined)
-  input.signal?.addEventListener("abort", stop, { once: true })
-  try {
-    const instructions = input.customInstructions ? `${SUMMARY_INSTRUCTIONS}\n\nAdditional focus from the user:\n${input.customInstructions}` : SUMMARY_INSTRUCTIONS
-    const reply = await ctx.api.client.session.prompt({
-      sessionID: helperID,
-      directory: ctx.directory,
-      system: SUMMARY_SYSTEM,
-      parts: [{ type: "text", text: `<conversation>\n${transcript}\n</conversation>\n\n${instructions}` }],
-    })
-    if (input.signal?.aborted) throw new Error("aborted")
-    const summary = ((reply.data as any)?.parts as any[] | undefined)
-      ?.filter((p) => p.type === "text" && !p.synthetic && !p.ignored)
-      .map((p) => p.text)
-      .join("")
-      .trim()
-    debug("summary.generated", { chars: summary?.length ?? 0 })
-    if (!summary) throw new Error("summary model returned no text")
-    return summary
-  } finally {
-    input.signal?.removeEventListener("abort", stop)
-    await ctx.api.client.session.delete({ sessionID: helperID, directory: ctx.directory }).catch(() => undefined)
-  }
+  const instructions = input.customInstructions ? `${SUMMARY_INSTRUCTIONS}\n\nAdditional focus from the user:\n${input.customInstructions}` : SUMMARY_INSTRUCTIONS
+  const summary = await draftWithHelper(ctx, {
+    title: "Context tree: branch summary",
+    system: SUMMARY_SYSTEM,
+    prompt: `<conversation>\n${transcript}\n</conversation>\n\n${instructions}`,
+    signal: input.signal,
+    onDraft: input.onDraft,
+  })
+  debug("summary.generated", { chars: summary.length })
+  return summary
 }
 
 /** Land a drafted summary at the destination as a `noReply` user message, journalled as
@@ -413,13 +492,29 @@ export async function executeUndo(ctx: ActionContext, sessionID: string, plan: U
   }
 }
 
-/** Run one prompt in a throw-away helper session and return the assistant text. */
-export async function draftWithHelper(ctx: ActionContext, input: { title: string; system: string; prompt: string; model?: { providerID: string; modelID: string } }): Promise<string> {
+/**
+ * Run one prompt in a throw-away helper session and return the assistant text — the single
+ * place the plugin waits on a model (the branch summary and the ◆ decision draft both land
+ * here), and so the single place that can be cancelled and watched.
+ *
+ * `signal` is honoured between steps and aborts the helper's in-flight reply, so `esc` gets
+ * out of a slow model. `onDraft` is called with the reply as it streams, for the progress
+ * line: nobody should watch a still screen for the ten seconds a summary takes.
+ */
+export async function draftWithHelper(
+  ctx: ActionContext,
+  input: { title: string; system: string; prompt: string; model?: { providerID: string; modelID: string }; signal?: AbortSignal; onDraft?: (text: string) => void },
+): Promise<string> {
+  if (input.signal?.aborted) throw new Error("aborted")
   const helper = await ctx.api.client.session.create({ directory: ctx.directory, title: input.title })
   const helperID = (helper.data as any)?.id as string | undefined
   if (!helperID) throw new Error("could not create helper session")
+  const stop = () => void ctx.api.client.session.abort({ sessionID: helperID, directory: ctx.directory }).catch(() => undefined)
+  input.signal?.addEventListener("abort", stop, { once: true })
+  const unwatch = input.onDraft ? streamHelperText(ctx, helperID, input.onDraft) : undefined
   try {
     const reply = await ctx.api.client.session.prompt({ sessionID: helperID, directory: ctx.directory, system: input.system, model: input.model, parts: [{ type: "text", text: input.prompt }] })
+    if (input.signal?.aborted) throw new Error("aborted")
     const text = ((reply.data as any)?.parts as any[] | undefined)
       ?.filter((p) => p.type === "text" && !p.synthetic && !p.ignored)
       .map((p) => p.text)
@@ -428,6 +523,8 @@ export async function draftWithHelper(ctx: ActionContext, input: { title: string
     if (!text) throw new Error("the model returned no text")
     return text
   } finally {
+    unwatch?.()
+    input.signal?.removeEventListener("abort", stop)
     await ctx.api.client.session.delete({ sessionID: helperID, directory: ctx.directory }).catch(() => undefined)
   }
 }
@@ -580,107 +677,121 @@ export async function mergeBranch(ctx: ActionContext, input: MergeInput): Promis
   const parentID = branch.parentSessionID
   const name = branchLabel(ctx.api, input.sessionID, branch.name)
   debug("merge.start", { mode: input.mode, sessionID: input.sessionID, parentID })
-  await abortIfBusy(ctx, input.sessionID)
+  // reading both transcripts, and then the draft, are the seconds this flow spends waiting;
+  // `report` is cleared in the `finally` at the bottom, on every path out
+  const report = progressReporter(ctx)
+  try {
+    await abortIfBusy(ctx, input.sessionID)
 
-  // both paths measure the branch by its own turns: what a squash folds into the record is
-  // also what a discard throws away — the prefix shared with the parent is neither
-  const parentMsgs = await ctx.api.client.session.messages({ sessionID: parentID, directory: ctx.directory }).catch(() => undefined)
-  const parentMessageIDs = ((parentMsgs?.data as any[]) ?? []).map((m) => String(m.info.id))
-  const own = await fetchOwnTranscript(ctx, input.sessionID)
-  const turns = ownTurnCount(own.messages, { messageID: branch.anchorMessageID, parentMessageIDs })
+    // both paths measure the branch by its own turns: what a squash folds into the record is
+    // also what a discard throws away — the prefix shared with the parent is neither
+    report.stage(`reading ⎇ ${clip(name, 24)}`, { quiet: true })
+    const parentMsgs = await ctx.api.client.session.messages({ sessionID: parentID, directory: ctx.directory }).catch(() => undefined)
+    const parentMessageIDs = ((parentMsgs?.data as any[]) ?? []).map((m) => String(m.info.id))
+    const own = await fetchOwnTranscript(ctx, input.sessionID)
+    const turns = ownTurnCount(own.messages, { messageID: branch.anchorMessageID, parentMessageIDs })
 
-  if (input.mode === "discard") {
-    // discard is the one mode that lands nothing, so it gets its own gate — and a cancelled
-    // note prompt has to abort too, not fall through as "no note"
-    const ok = await confirmDialog(ctx, `Discard ⎇ ${name} (${plural(turns, "turn")})?`, DISCARD_NOTICE)
-    if (!ok) {
-      notify(ctx, { variant: "warning", message: `⎇ ${name} kept — nothing discarded` })
-      return undefined
-    }
-    let note = input.note
-    if (note === undefined) {
-      const answer = await promptDialog(ctx, "Why? (optional note on the close marker)", "dead end")
-      if (answer === undefined) {
+    if (input.mode === "discard") {
+      // discard is the one mode that lands nothing, so it gets its own gate — and a cancelled
+      // note prompt has to abort too, not fall through as "no note"
+      report.done()
+      const ok = await confirmDialog(ctx, `Discard ⎇ ${name} (${plural(turns, "turn")})?`, DISCARD_NOTICE)
+      if (!ok) {
         notify(ctx, { variant: "warning", message: `⎇ ${name} kept — nothing discarded` })
         return undefined
       }
-      note = answer.trim() || undefined
-    }
-    record(ctx, treeId, "branch.closed", { sessionID: input.sessionID, status: "rejected", note })
-    await mirrorMetadata(ctx, input.sessionID, { status: "rejected" })
-    navigateToSession(ctx, parentID)
-    ctx.api.ui.toast({ variant: "success", message: `⎇ ${name} discarded — back on the trunk` })
-    return parentID
-  }
-
-  // --- draft ---------------------------------------------------------------
-  const transcript = branchTranscriptText(own, { messageID: branch.anchorMessageID, parentMessageIDs })
-  // no journal model (an adopted fork, or /branch without one) still knows what answered here
-  const model = branch.branchModel ?? branch.trunkModel ?? own.model
-  const modelRef = model ? { providerID: model.split("/")[0]!, modelID: model.split("/").slice(1).join("/") } : undefined
-  const siblingIDs = input.mode === "tournament" ? openSiblings(state, input.sessionID) : []
-  const siblings = await Promise.all(
-    siblingIDs.map(async (id) => {
-      const tr = await fetchOwnTranscript(ctx, id)
-      const b = state.sessions[id]!
-      return { name: branchLabel(ctx.api, id, b.name), transcript: branchTranscriptText(tr, { messageID: b.anchorMessageID, parentMessageIDs }, 800) }
-    }),
-  )
-  let draft: string
-  // a record the user typed field by field needs no second gate: the dialogs were it
-  let typed = false
-  if (input.mode === "squash-no-llm") {
-    // with no $EDITOR the gate has nowhere to type, so the fields are asked one dialog at a time
-    if (hasEditor()) draft = decisionTemplate(name, model)
-    else {
-      const written = await promptDecisionRecord(ctx, name, model)
-      if (!written) {
-        notify(ctx, { variant: "warning", message: "merge aborted — nothing written" })
-        return undefined
+      let note = input.note
+      if (note === undefined) {
+        const answer = await promptDialog(ctx, "Why? (optional note on the close marker)", "dead end")
+        if (answer === undefined) {
+          notify(ctx, { variant: "warning", message: `⎇ ${name} kept — nothing discarded` })
+          return undefined
+        }
+        note = answer.trim() || undefined
       }
-      draft = written
-      typed = true
+      record(ctx, treeId, "branch.closed", { sessionID: input.sessionID, status: "rejected", note })
+      await mirrorMetadata(ctx, input.sessionID, { status: "rejected" })
+      navigateToSession(ctx, parentID)
+      ctx.api.ui.toast({ variant: "success", message: `⎇ ${name} discarded — back on the trunk` })
+      return parentID
     }
-  } else {
-    notify(ctx, { message: `drafting the decision record for ⎇ ${name}…`, duration: 60000 })
-    draft = await draftWithHelper(ctx, { title: `Context tree: draft for ${name}`, system: DECISION_SYSTEM, prompt: buildDecisionDraftPrompt({ branchName: name, model, transcript, siblings }), model: modelRef })
-  }
-  debug("merge.drafted", { chars: draft.length })
 
-  // --- gate ----------------------------------------------------------------
-  if (!typed && !input.confirm && !hasEditor()) throw new Error("no $EDITOR configured — set VISUAL/EDITOR, or use the in-app confirm")
-  const confirm = typed ? async (d: string) => d : (input.confirm ?? ((d: string) => editInExternalEditor(ctx.api.renderer as any, d, ctx.directory, MERGE_GATE_NOTICE)))
-  const confirmed = await confirm(draft)
-  if (!confirmed) {
-    notify(ctx, { variant: "warning", message: "merge aborted — nothing written" })
-    return undefined
-  }
-  // an unfilled template is not a record: landing it would cost the trunk ~130 tokens of
-  // "<1–3 sentences: …>" and nothing else, so the branch stays open instead
-  if (templatePlaceholders(confirmed).length > 0) {
-    notify(ctx, { variant: "warning", message: "record not written: fill in the template" })
-    return undefined
-  }
+    // --- draft ---------------------------------------------------------------
+    const transcript = branchTranscriptText(own, { messageID: branch.anchorMessageID, parentMessageIDs })
+    // no journal model (an adopted fork, or /branch without one) still knows what answered here
+    const model = branch.branchModel ?? branch.trunkModel ?? own.model
+    const modelRef = model ? { providerID: model.split("/")[0]!, modelID: model.split("/").slice(1).join("/") } : undefined
+    const siblingIDs = input.mode === "tournament" ? openSiblings(state, input.sessionID) : []
+    const siblings = await Promise.all(
+      siblingIDs.map(async (id) => {
+        const tr = await fetchOwnTranscript(ctx, id)
+        const b = state.sessions[id]!
+        return { name: branchLabel(ctx.api, id, b.name), transcript: branchTranscriptText(tr, { messageID: b.anchorMessageID, parentMessageIDs }, 800) }
+      }),
+    )
+    // the reading stage ends here: what follows either opens a dialog, which owns the screen,
+    // or starts the draft, which reports a stage of its own
+    report.done()
+    let draft: string
+    // a record the user typed field by field needs no second gate: the dialogs were it
+    let typed = false
+    if (input.mode === "squash-no-llm") {
+      // with no $EDITOR the gate has nowhere to type, so the fields are asked one dialog at a time
+      if (hasEditor()) draft = decisionTemplate(name, model)
+      else {
+        const written = await promptDecisionRecord(ctx, name, model)
+        if (!written) {
+          notify(ctx, { variant: "warning", message: "merge aborted — nothing written" })
+          return undefined
+        }
+        draft = written
+        typed = true
+      }
+    } else {
+      report.stage(`drafting the ◆ record for ⎇ ${clip(name, 24)}`)
+      draft = await draftWithHelper(ctx, { title: `Context tree: draft for ${name}`, system: DECISION_SYSTEM, prompt: buildDecisionDraftPrompt({ branchName: name, model, transcript, siblings }), model: modelRef, onDraft: report.detail })
+      report.done()
+    }
+    debug("merge.drafted", { chars: draft.length })
 
-  // --- land ----------------------------------------------------------------
-  const text = decisionMessageText(confirmed, name)
-  const landed = await ctx.api.client.session.prompt({
-    sessionID: parentID,
-    directory: ctx.directory,
-    noReply: true,
-    parts: [{ type: "text", text, metadata: { ctree: { kind: "decision", forkSessionID: input.sessionID, branchName: name } } }],
-  })
-  const messageID = String((landed.data as any)?.info?.id ?? (landed.data as any)?.id ?? "")
-  if (!messageID) throw new Error("could not write the decision record into the trunk")
-  record(ctx, treeId, "decision.recorded", { sessionID: parentID, messageID, forkSessionID: input.sessionID, branchName: name, siblings: siblings.map((s) => ({ name: s.name })), text })
-  record(ctx, treeId, "branch.closed", { sessionID: input.sessionID, status: "squashed", decisionMessageID: messageID })
-  for (const id of siblingIDs) record(ctx, treeId, "branch.closed", { sessionID: id, status: "rejected", note: `lost tournament to ${name}` })
-  await mirrorMetadata(ctx, input.sessionID, { status: "squashed", decisionMessageID: messageID })
-  for (const id of siblingIDs) await mirrorMetadata(ctx, id, { status: "rejected" })
-  debug("merge.landed", { messageID, siblings: siblingIDs.length })
-  navigateToSession(ctx, parentID)
-  ctx.api.ui.toast({ variant: "success", message: `◆ merged ⎇ ${name}${siblingIDs.length ? ` (+${siblingIDs.length} sibling${siblingIDs.length === 1 ? "" : "s"} closed)` : ""}` })
-  return parentID
+    // --- gate ----------------------------------------------------------------
+    if (!typed && !input.confirm && !hasEditor()) throw new Error("no $EDITOR configured — set VISUAL/EDITOR, or use the in-app confirm")
+    const confirm = typed ? async (d: string) => d : (input.confirm ?? ((d: string) => editInExternalEditor(ctx.api.renderer as any, d, ctx.directory, MERGE_GATE_NOTICE)))
+    const confirmed = await confirm(draft)
+    if (!confirmed) {
+      notify(ctx, { variant: "warning", message: "merge aborted — nothing written" })
+      return undefined
+    }
+    // an unfilled template is not a record: landing it would cost the trunk ~130 tokens of
+    // "<1–3 sentences: …>" and nothing else, so the branch stays open instead
+    if (templatePlaceholders(confirmed).length > 0) {
+      notify(ctx, { variant: "warning", message: "record not written: fill in the template" })
+      return undefined
+    }
+
+    // --- land ----------------------------------------------------------------
+    report.stage(`writing the ◆ record into ${sessionLabel(ctx, parentID)}`, { quiet: true })
+    const text = decisionMessageText(confirmed, name)
+    const landed = await ctx.api.client.session.prompt({
+      sessionID: parentID,
+      directory: ctx.directory,
+      noReply: true,
+      parts: [{ type: "text", text, metadata: { ctree: { kind: "decision", forkSessionID: input.sessionID, branchName: name } } }],
+    })
+    const messageID = String((landed.data as any)?.info?.id ?? (landed.data as any)?.id ?? "")
+    if (!messageID) throw new Error("could not write the decision record into the trunk")
+    record(ctx, treeId, "decision.recorded", { sessionID: parentID, messageID, forkSessionID: input.sessionID, branchName: name, siblings: siblings.map((s) => ({ name: s.name })), text })
+    record(ctx, treeId, "branch.closed", { sessionID: input.sessionID, status: "squashed", decisionMessageID: messageID })
+    for (const id of siblingIDs) record(ctx, treeId, "branch.closed", { sessionID: id, status: "rejected", note: `lost tournament to ${name}` })
+    await mirrorMetadata(ctx, input.sessionID, { status: "squashed", decisionMessageID: messageID })
+    for (const id of siblingIDs) await mirrorMetadata(ctx, id, { status: "rejected" })
+    debug("merge.landed", { messageID, siblings: siblingIDs.length })
+    navigateToSession(ctx, parentID)
+    ctx.api.ui.toast({ variant: "success", message: `◆ merged ⎇ ${name}${siblingIDs.length ? ` (+${siblingIDs.length} sibling${siblingIDs.length === 1 ? "" : "s"} closed)` : ""}` })
+    return parentID
+  } finally {
+    report.done()
+  }
 }
 
 /** The record's fields, asked one dialog at a time — the fallback for a merge with no $EDITOR.
