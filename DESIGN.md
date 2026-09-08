@@ -264,7 +264,7 @@ built-in `tui.json` keybinds table only covers OpenCode's own action names):
 means there. Already true: `j k`, `ctrl+d`/`ctrl+u`, `ctrl+f`/`ctrl+b`, `gg`, `G`, `{ }`
 (vim's paragraph motion, mapped onto turns — the unit the strip already rules), `[[ ]]`,
 `/ n N`, `y`, `u`. Turn folds take vim's fold vocabulary whole rather than inventing one:
-`za` toggle, `zo`/`zc` open/close, `zR`/`zM` open-all/close-all, `zj`/`zk` between folds
+`za` toggle, `zo`/`zc` open/close, `zr`/`zm` open-all/close-all, `zj`/`zk` between folds
 (`h`/`l`/`Tab` stay as tree-explorer aliases). Two deliberate exceptions: `?` is help, not
 reverse search (`/` with `N` covers that, and `?` is universal in TUIs), and `q`/`esc` is back.
 

@@ -249,7 +249,8 @@ const HELP = [
   "  │ in the lanes is a turn boundary · the lanes show what the gf filter shows (→ tools-only = just calls)",
 ]
 
-/** `f` opens this as a picker; `F` steps back through it (DESIGN.md §7.5). */
+/** `gf` opens this as a picker (DESIGN.md §7.5). `filter_prev` steps back through it, with no
+ *  default key since every free single stroke means something in vim — `keybinds` can add one. */
 const FILTERS: { title: string; value: Filter; description: string }[] = [
   { title: "default", value: "default", description: "user turns, assistant text, tool steps" },
   { title: "no-tools", value: "no-tools", description: "hide ⚙ tool steps" },
@@ -295,7 +296,7 @@ export function TreeRoute(props: TreeRouteProps) {
    *  jump — nothing has been forked or switched yet (Pi's `abortBranchSummary`). */
   const [summaryAbort, setSummaryAbort] = createSignal<AbortController | undefined>()
   const [cropMode, setCropMode] = createSignal<"result" | "turn" | undefined>()
-  /** Fold posture for turns nobody has touched (`zR` opens all, `zM` closes all), and the
+  /** Fold posture for turns nobody has touched (`zr` opens all, `zm` closes all), and the
    *  hand-folds that override it. Route state on purpose: your folds hold while the tree is
    *  open and every visit starts from the same clean outline (DESIGN.md §7.5). */
   const [foldBase, setFoldBase] = createSignal<FoldPolicy["base"]>("auto")
@@ -1275,12 +1276,12 @@ export function TreeRoute(props: TreeRouteProps) {
     return n
   }
 
-  /** `zR` / `zM`: the posture for every turn nobody has touched, and the hand-folds go with it
+  /** `zr` / `zm`: the posture for every turn nobody has touched, and the hand-folds go with it
    *  — otherwise "open everything" would leave your own closed turns shut. */
   function foldAll(base: FoldPolicy["base"]) {
     setFoldBase(base)
     setManualFolds(new Map())
-    notify(base === "all" ? "all turns folded — zR opens them" : "all turns open — zM folds them")
+    notify(base === "all" ? "all turns folded — zr opens them" : "all turns open — zm folds them")
   }
 
   function foldOrUnfold(open: boolean) {
