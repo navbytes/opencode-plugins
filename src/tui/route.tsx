@@ -324,10 +324,22 @@ export function TreeRoute(props: TreeRouteProps) {
   // palette (actions.ts) take this as `ctx.notify`, falling back to `api.ui.toast` without one.
   const [notice, setNotice] = createSignal<string | undefined>()
   let noticeTimer: ReturnType<typeof setTimeout> | undefined
+  /**
+   * Ask OpenCode's renderer for a frame. It renders **on demand**, so a signal we change from
+   * inside an `await` reaches the buffer and then sits there invisibly until something else
+   * repaints — which is why a status line set while a model was answering could stay dark for
+   * the whole call (`test/e2e/tui.test.ts` pins this). Every feedback path below asks.
+   */
+  const paint = () => (api.renderer as { requestRender?: () => void } | undefined)?.requestRender?.()
+
   const notify = (message: string, ms = 4000) => {
     setNotice(message)
     clearTimeout(noticeTimer)
-    noticeTimer = setTimeout(() => setNotice(undefined), ms)
+    noticeTimer = setTimeout(() => {
+      setNotice(undefined)
+      paint()
+    }, ms)
+    paint()
   }
   onCleanup(() => clearTimeout(noticeTimer))
 
@@ -337,21 +349,34 @@ export function TreeRoute(props: TreeRouteProps) {
     if (!state) {
       setProgress(undefined)
       setCancelling(undefined)
+      paint()
       return
     }
     const open = progress()
     setProgress({ ...state, startedAt: open && open.label === state.label ? open.startedAt : Date.now() })
+    paint()
   }
   const ctx: ActionContext = { api, store, directory, notify, progress: reportProgress }
 
-  // one interval for as long as something is running, rather than a permanently ticking route
+  // One interval for as long as something is running, rather than a permanently ticking route.
+  // `requestLive` is the renderer's own refcounted "keep drawing frames" request — the same
+  // thing an animation asks for — so the spinner turns without depending on anything else
+  // happening; the ticks below are what give it something new to draw.
   createEffect(
     on(
       () => progress() !== undefined,
       (running) => {
         if (!running) return
-        const timer = setInterval(() => setFrame((n) => n + 1), SPINNER_MS)
-        onCleanup(() => clearInterval(timer))
+        const renderer = api.renderer as { requestLive?: () => void; dropLive?: () => void } | undefined
+        renderer?.requestLive?.()
+        const timer = setInterval(() => {
+          setFrame((n) => n + 1)
+          paint()
+        }, SPINNER_MS)
+        onCleanup(() => {
+          clearInterval(timer)
+          renderer?.dropLive?.()
+        })
       },
     ),
   )

@@ -40,25 +40,38 @@ async function run(cmd: string[], cwd: string, env?: Record<string, string | und
 
 /**
  * Ensures a local `opencode` binary exists at harness/node_modules/.bin/opencode,
- * installing it with `npm i opencode-ai@1.18.26` in harness/ if missing. Writes a
+ * installing it with `npm i opencode-ai@$OPENCODE_VERSION` in harness/ if missing or if a
+ * different version is installed. Writes a
  * minimal harness/package.json first if one isn't there yet (harness/package*.json
  * is gitignored) — otherwise a cwd-less `npm i` walks up to the repo root and
  * pollutes the root package.json instead of installing locally.
  */
+/** The OpenCode the suite runs against. `CTREE_OPENCODE_VERSION` overrides it, so a report
+ *  against a newer release can be reproduced without editing the harness. */
+export const OPENCODE_VERSION = process.env["CTREE_OPENCODE_VERSION"] || "1.18.26"
+
+function installedOpencodeVersion(): string | undefined {
+  try {
+    return JSON.parse(readFileSync(path.join(HARNESS_DIR, "node_modules/opencode-ai/package.json"), "utf8")).version as string
+  } catch {
+    return undefined
+  }
+}
+
 export async function ensureOpencode(): Promise<string> {
   const bin = path.join(HARNESS_DIR, "node_modules/.bin/opencode")
-  if (!existsSync(bin)) {
+  if (!existsSync(bin) || installedOpencodeVersion() !== OPENCODE_VERSION) {
     const pkgJson = path.join(HARNESS_DIR, "package.json")
     if (!existsSync(pkgJson)) {
       writeFileSync(pkgJson, JSON.stringify({ name: "harness", version: "1.0.0", private: true }, null, 2) + "\n")
     }
     const proc = Bun.spawn({
-      cmd: ["npm", "i", "opencode-ai@1.18.26"],
+      cmd: ["npm", "i", `opencode-ai@${OPENCODE_VERSION}`],
       cwd: HARNESS_DIR,
       stdio: ["inherit", "inherit", "inherit"],
     })
     const code = await proc.exited
-    if (code !== 0) throw new Error(`npm i opencode-ai@1.18.26 failed in ${HARNESS_DIR} (exit ${code})`)
+    if (code !== 0) throw new Error(`npm i opencode-ai@${OPENCODE_VERSION} failed in ${HARNESS_DIR} (exit ${code})`)
   }
   if (!existsSync(bin)) throw new Error(`opencode binary still missing at ${bin} after install`)
   return bin
@@ -87,6 +100,9 @@ export interface StartMockOptions {
   port?: number
   /** MOCK_REPLY override for the assistant's canned text reply. */
   reply?: string
+  /** MOCK_SLOW_MS: hold back the branch-summary request this long, so a test can watch the
+   *  tree while a model is answering. Only the summary is delayed; setup turns stay fast. */
+  slowSummaryMs?: number
 }
 
 export async function startMock(opts: StartMockOptions = {}): Promise<StartedMock> {
@@ -103,6 +119,7 @@ export async function startMock(opts: StartMockOptions = {}): Promise<StartedMoc
       MOCK_LOG: logFile,
       MOCK_TOOL: opts.tool ? "1" : "0",
       ...(opts.reply ? { MOCK_REPLY: opts.reply } : {}),
+      ...(opts.slowSummaryMs ? { MOCK_SLOW_MS: String(opts.slowSummaryMs) } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
   })

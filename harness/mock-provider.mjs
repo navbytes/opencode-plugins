@@ -29,6 +29,23 @@ const server = http.createServer((req, res) => {
     if (req.method === "POST" && url.startsWith("/v1/chat/completions")) {
       let json = {};
       try { json = JSON.parse(body || "{}"); } catch {}
+      // MOCK_SLOW_MS: hold back the *summary* request only (the context-tree helper session's
+      // system prompt names it), so a test can watch the tree while a model is answering
+      // without slowing the turns that set the test up.
+      const slow = Number(process.env.MOCK_SLOW_MS || 0);
+      const isSummary = (json.messages || []).some((m) => typeof m.content === "string" && m.content.includes("context summarization assistant"));
+      if (slow > 0 && isSummary) {
+        return setTimeout(() => respond(req, res, url, body, json), slow);
+      }
+      return respond(req, res, url, body, json);
+    }
+    res.writeHead(404); res.end("not found");
+  });
+});
+
+function respond(req, res, url, body, json) {
+  {
+    {
       fs.appendFileSync(LOG, JSON.stringify({ ts: Date.now(), url, model: json.model, stream: !!json.stream, body: json }) + "\n");
       const id = "chatcmpl-" + Date.now();
       const created = Math.floor(Date.now() / 1000);
@@ -53,7 +70,6 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { "content-type": "application/json" });
       return res.end(JSON.stringify({ id, object: "chat.completion", created, model: json.model, choices: [{ index: 0, message: { role: "assistant", content: REPLY }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 5, total_tokens: 105 } }));
     }
-    res.writeHead(404); res.end("not found");
-  });
-});
+  }
+}
 server.listen(PORT, "127.0.0.1", () => console.log(`mock provider on http://127.0.0.1:${PORT}/v1 -> ${LOG}`));

@@ -336,6 +336,66 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
     }
   }, 300_000)
 
+  test("a summary that takes seconds shows a live progress line while it runs", async () => {
+    // The mock answers instantly, which is why no earlier test watched the tree *during* a
+    // draft at all. Holding the summary request back pins the two things a user reports when
+    // they say "no feedback": that the line is up straight away (0.3s in, not whenever
+    // something else repaints), and that it is still moving while the model thinks.
+    const m = await startMock({ tool: false, slowSummaryMs: 20000 })
+    const proj = await createProject({ mockPort: m.port })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    try {
+      const { screens } = await runTuiScreens({
+        projectDir: proj.dir,
+        keys: [
+          ["Ask anything", 1, "first question\r"],
+          ["mock reply", 8, "second question\r"],
+          ["mock reply", 16, "/tree"],
+          ["Context tree", 0.5, "\r"],
+          ["Context tree ·", 2, "gg"],
+          ["Context tree ·", 3, "\r"],
+          // ↓ once = "Summarize everything below this point"
+          ["Fork & prefill this turn", 1.5, "\x1b[B"],
+          ["Summarize everything below", 1, "\r"],
+          // four screens half a second apart while the summary is still in flight: close
+          // enough that only a *live* line changes between them (the spinner turns every
+          // 120ms), which is the thing OpenCode's on-demand renderer does not do by itself
+          ["Summarize everything below", 0.3, ""],
+          ["Summarize everything below", 0.5, ""],
+          ["Summarize everything below", 0.5, ""],
+          ["Summarize everything below", 0.5, ""],
+          ["mock reply|Ask anything", 20, "\x03"],
+          ["", 1, "\x03"],
+        ],
+        timeoutSec: 240,
+        cols: 130,
+        rows: 34,
+        exitWhenDone: true,
+      })
+      if (process.env["CTREE_DUMP"]) await Bun.write(process.env["CTREE_DUMP"]!, screens.map((x) => `=== ${x.label}\n${x.screen}`).join("\n"))
+      // the first sample is 0.3s after the choice: the line has to be up *immediately*, not
+      // whenever something else happens to repaint the screen
+      const inFlight = screens.filter((x) => x.label.includes("conditional key 8") || x.label.includes("conditional key 9") || x.label.includes("conditional key 10") || x.label.includes("conditional key 11"))
+      expect(inFlight.length).toBe(4)
+      const during = inFlight.filter((x) => x.screen.includes("summarizing"))
+      if (during.length < 4) throw new Error(`the progress line was missing from ${4 - during.length} of the 4 in-flight samples: ${inFlight.map((x) => (x.screen.includes("summarizing") ? "line" : "NOTHING")).join(" ")}`)
+      expect(during.every((x) => x.screen.includes("esc cancels"))).toBe(true)
+
+      // It is *live*: the spinner has turned between these half-second samples. Without a
+      // frame request the line is drawn once and then sits frozen until something unrelated
+      // repaints — which is exactly what "no feedback" looked like.
+      const frames = during.map((x) => /([⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]) summarizing/.exec(x.screen)?.[1]).filter((v): v is string => v !== undefined)
+      if (process.env["CTREE_DUMP"]) console.log(`spinner frames across ${during.length} samples: ${frames.join(" ")}`)
+      expect(frames.length).toBe(during.length)
+      // two of four is enough to prove it moved: at 8 frames a second, samples half a second
+      // apart alias against the 10-frame cycle, so "all four differ" would be flaky
+      expect(new Set(frames).size).toBeGreaterThan(1)
+    } finally {
+      await m.stop()
+      await proj.cleanup()
+    }
+  }, 300_000)
+
   test("the g-prefixed verbs fire alongside gg", async () => {
     // `gg` was the only sequence in the keymap; the realignment put every plugin verb behind
     // `g`, so this proves the sequence tree branches rather than `gg` shadowing them
