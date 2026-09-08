@@ -214,7 +214,10 @@ cache was reset.
 
 ## Keys
 
-Vim-aligned, inside `/tree`. Press `?` for the full list without leaving the screen.
+Vim-aligned, inside `/tree`: a key means here what it means in vim, and the verbs vim has no
+word for live behind `g` the way LSP plugins put theirs (`gd`, `gr`, `gi`). Press `?` for the
+full list without leaving the screen. Every key is rebindable — see `keybinds` in
+[Configuration](#configuration).
 
 | Key | Action |
 |---|---|
@@ -224,18 +227,20 @@ Vim-aligned, inside `/tree`. Press `?` for the full list without leaving the scr
 | `h` `l` · `Tab` | fold / unfold a branch inline |
 | `za` · `zo` `zc` | fold / open / close the turn you are on |
 | `zr` `zm` · `zj` `zk` | open every fold / fold every turn · move between folds |
+| `H` `M` `L` | top / middle / bottom of the screen |
 | `⏎` | go here — the footer names what it will do for this row |
-| `b` | branch here, naming it and optionally picking a model |
-| `m` | merge: squash, squash without the model, discard, or tournament |
+| `gb` | branch here, naming it and optionally picking a model |
+| `gm` | merge: squash, squash without the model, discard, or tournament |
 | `c` | crop mode — `space` mark, `a` auto-mark, `t` result⇄turn, `⏎` apply |
-| `u` (`x`) | undo the last branch / merge / crop |
+| `u` | undo the last branch / merge / crop |
+| `m` | mark: label the selected message |
 | `/` · `n` `N` | live search · next / previous match |
-| `f` `F` | filter picker, forwards / back |
+| `gf` | filter picker |
 | `i` `I` | inspector in the side pane / full screen (`PgUp` `PgDn` to page) |
-| `1` `2` · `0` | timeline lanes, x-axis by duration / one cell per event · off |
-| `s` | what is filling the context |
-| `D` `E` | decisions panel · export to `ctree-decisions.md` |
-| `L` `y` | label this point · copy the selected text |
+| `g1` `g2` · `g0` | timeline lanes, x-axis by duration / one cell per event · off |
+| `gs` | what is filling the context |
+| `gd` `ge` | decisions panel · export to `ctree-decisions.md` |
+| `y` | copy the selected text |
 | `?` `q` | help · back |
 
 ## Commands

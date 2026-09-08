@@ -2,6 +2,52 @@
 
 ## Unreleased
 
+### Breaking: the keymap is now vim-aligned
+
+A key inside `/tree` should mean what it means in vim. Seven bindings did not, and they have
+moved. Every one is rebindable — the `keybinds` plugin option takes the command names below,
+so the old spellings can be restored verbatim (config at the end of this entry).
+
+| was | vim's meaning | is now |
+|---|---|---|
+| `J` `K` (jump 20 rows) | join / keyword lookup | **gone** — `ctrl+f`/`ctrl+b` page, `}`/`{` move by turn |
+| `x` (undo alias) | delete a character | **gone** — `u` still undoes |
+| `e` (toggle branch fold) | end of word | **gone** — `Tab` and `h`/`l` still fold |
+| `0` `1` `2` (lanes) | digits are **counts** | `g0` `g1` `g2` |
+| `L` (label) | bottom of the screen | `m` — vim's *set mark*, which is what a label is |
+| `m` (merge) | set mark | `gm` |
+| `b` (branch) · `s` (consumers) · `D` (decisions) · `E` (export) · `f` (filter) | word motions, substitute, delete-to-EOL, find-char | `gb` · `gs` · `gd` · `ge` · `gf` |
+
+`F` (filter step-back) loses its default key: every free single stroke is a vim motion, and
+the picker on `gf` selects any filter directly. The command stays, so `keybinds` can give it
+one.
+
+Freeing `L` lets **`H` `M` `L`** mean what they do in vim — the top, middle and bottom row of
+what is on screen. The verbs behind `g` follow vim's own answer for words the language lacks,
+the way LSP plugins do it (`gd`, `gr`, `gi`). Lowercase throughout, because OpenCode's binding
+parser does not match a shifted second stroke (`gD` never fires; verified against the real TUI,
+which is also why the fold keys below are `zr`/`zm` rather than vim's `zR`/`zM`).
+
+Two keys stay deliberately un-vim: `?` is help, not reverse search (`/` with `N` covers that,
+and `?` is universal in TUIs), and `q`/`esc` is back.
+
+To keep the old keys, in `opencode.json`:
+
+```json
+{
+  "plugin": {
+    "opencode-context-tree": {
+      "keybinds": {
+        "branch": "b", "merge": "m", "label": "shift+l", "consumers": "s",
+        "decisions": "shift+d", "export": "shift+e", "filter_pick": "f",
+        "filter_prev": "shift+f", "mode_duration": "1", "mode_turns": "2",
+        "lanes_off": "0", "toggle": "tab,e", "undo": "u,x"
+      }
+    }
+  }
+}
+```
+
 - **Turns fold.** A turn whose model ran six tools was seven rows in the outline, one of which
   was the `●` you were actually skimming for. Turns older than the last three on your path now
   open folded, carrying what they hold — `● T5 add a retry to the flaky test   ▸ 6 steps ·

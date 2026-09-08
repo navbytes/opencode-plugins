@@ -252,11 +252,13 @@ built-in `tui.json` keybinds table only covers OpenCode's own action names):
 
 - open: `ctrl+q` (matches `pi-context-tree`) — `<leader>t` suggested in README because
   many terminals eat `ctrl+q`.
-- inside the route: `↑↓`/`j k` move · `g G` top/bottom · `shift+↑↓`/`J K` jump 20 ·
-  `←→`/`h l` fold/unfold branch · `⏎` go here · `b` branch · `m` merge · `c` crop mark ·
-  `t` result⇄turn · `a` auto-mark · `x` undo · `i` inspector · `u` consumers ·
-  `D` decisions · `L` label · `/` search · `f` filter cycle · `1 2` lane x-axis ·
-  `y` copy · `e` expand branch inline · `q`/`esc` back.
+- inside the route: `↑↓`/`j k` move · `gg`/`G` top/bottom · `ctrl+f`/`ctrl+b` page ·
+  `ctrl+d`/`ctrl+u` half page · `H M L` screen top/middle/bottom · `{ }` turn rows ·
+  `[[ ]]` branch rows · `←→`/`h l`/`Tab` fold branch · `za zo zc zr zm zj zk` fold turns ·
+  `⏎` go here · `gb` branch · `gm` merge · `c` crop mark · `t` result⇄turn · `a` auto-mark ·
+  `u` undo · `i`/`I` inspector · `gs` consumers · `gd` decisions · `ge` export · `m` label
+  (mark) · `/ n N` search · `gf` filter · `g1 g2 g0` lane x-axis · `y` copy · `?` help ·
+  `q`/`esc` back.
 
 **Vim alignment.** The keymap should read native to a vim user, so a key means here what it
 means there. Already true: `j k`, `ctrl+d`/`ctrl+u`, `ctrl+f`/`ctrl+b`, `gg`, `G`, `{ }`
@@ -266,9 +268,9 @@ means there. Already true: `j k`, `ctrl+d`/`ctrl+u`, `ctrl+f`/`ctrl+b`, `gg`, `G
 (`h`/`l`/`Tab` stay as tree-explorer aliases). Two deliberate exceptions: `?` is help, not
 reverse search (`/` with `N` covers that, and `?` is universal in TUIs), and `q`/`esc` is back.
 
-*Planned realignment*, deferred to its own release because it moves keys people have in their
-fingers — the CHANGELOG will carry the old → new table and the `keybinds` config that restores
-the old spellings:
+*The realignment* (shipped as its own change, since it moves keys people had in their fingers;
+the CHANGELOG carries the same table and the `keybinds` config that restores the old
+spellings):
 
 | now | vim's meaning | becomes |
 |---|---|---|
@@ -278,12 +280,15 @@ the old spellings:
 | `L` label | bottom of the window | `m` (vim's *set mark*: a label is a bookmark), freeing `H M L` |
 | `m` merge | set mark | `gm` |
 | `e` toggle fold | end of word | dropped; `Tab` and `za` cover it |
-| `f` `F` filter | find character in line | `gf` |
+| `f` `F` filter | find character in line | `gf`; `filter_prev` keeps the command but loses its default key |
 
 The pattern behind the right-hand column is vim's own answer for verbs the language lacks:
 put them behind `g`, the way LSP plugins do (`gd`, `gr`, `gi`) — `gb` branch, `gm` merge,
-`gs` consumers, `gD` decisions, `gE` export — which frees the bare letters for real vim
-meanings.
+`gs` consumers, `gd` decisions, `ge` export — which frees the bare letters for real vim
+meanings. Lowercase throughout: this host's binding parser does not match a shifted *second*
+stroke, verified against the real TUI (`test/e2e/tui.test.ts` drives `gs`/`gd` alongside `gg`
+to pin that the sequence tree branches at all). Freeing `L` is what lets `H M L` mean the
+top, middle and bottom of the screen, as they do in vim.
 
 ---
 

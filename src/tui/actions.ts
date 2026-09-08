@@ -541,7 +541,7 @@ export const UNDO_KEY = "u"
 export const MERGE_GATE_NOTICE = `Edit the ◆ decision record, then save to confirm (empty file or a non-zero exit aborts the merge).\n${MERGE_TRUST}`
 
 /** The discard gate's message: the same promise, plus the way back. */
-export const DISCARD_NOTICE = `${MERGE_TRUST}\nThe branch is only marked rejected — ${UNDO_KEY} (alias x) undoes it.`
+export const DISCARD_NOTICE = `${MERGE_TRUST}\nThe branch is only marked rejected — ${UNDO_KEY} undoes it.`
 
 /** Where the merge lands, as the picker should name it. `label` is `TRUNK_LABEL` for the tree
  *  root, else the parent branch's name; the figures come from the parent's own transcript. */

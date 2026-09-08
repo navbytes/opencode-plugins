@@ -147,8 +147,10 @@ function segmentsOf(line: string, query: string, thought: string): Segment[] {
 const DEFAULT_KEYS: Record<string, string[]> = {
   up: ["up", "k"],
   down: ["down", "j"],
-  jump_up: ["shift+up", "shift+k"],
-  jump_down: ["shift+down", "shift+j"],
+  // vim's H / M / L: the top, middle and bottom of what is on screen
+  screen_top: ["shift+h"],
+  screen_middle: ["shift+m"],
+  screen_bottom: ["shift+l"],
   half_up: ["ctrl+u"],
   half_down: ["ctrl+d"],
   page_up: ["ctrl+b"],
@@ -174,29 +176,33 @@ const DEFAULT_KEYS: Record<string, string[]> = {
   fold_close_all: ["zm"],
   next_fold: ["zj"],
   prev_fold: ["zk"],
-  toggle: ["tab", "e"],
+  toggle: ["tab"],
   go: ["return"],
-  branch: ["b"],
+  branch: ["gb"],
   crop: ["c"],
   crop_toggle_mode: ["t"],
   mark: ["space"],
   auto: ["a"],
-  undo: ["u", "x"],
-  merge: ["m"],
+  undo: ["u"],
+  merge: ["gm"],
   inspector: ["i"],
   inspector_full: ["shift+i"],
   inspector_up: ["pageup"],
   inspector_down: ["pagedown"],
-  consumers: ["s"],
+  consumers: ["gs"],
   copy: ["y"],
-  mode_duration: ["1"],
-  mode_turns: ["2"],
-  lanes_off: ["0"],
-  decisions: ["shift+d"],
-  export: ["shift+e"],
-  label: ["shift+l"],
-  filter_pick: ["f"],
-  filter_prev: ["shift+f"],
+  // bare digits are counts in vim, so the lane modes move behind `g` and leave them free
+  mode_duration: ["g1"],
+  mode_turns: ["g2"],
+  lanes_off: ["g0"],
+  decisions: ["gd"],
+  export: ["ge"],
+  // vim's "set mark": a label is a bookmark on a message
+  label: ["m"],
+  filter_pick: ["gf"],
+  // no default: the picker replaced the step-back, and every free single stroke is a vim
+  // motion. Still a command, so `keybinds: { filter_prev: "..." }` can give it one.
+  filter_prev: [],
   search: ["/"],
   search_next: ["n"],
   search_prev: ["shift+n"],
@@ -212,25 +218,25 @@ const INSPECTOR_MAX_LINES = 2000
 /** Placeholder for the strip while no session is loaded. */
 const EMPTY_TRANSCRIPT: Transcript = { sessionID: "", title: "", status: "available", messages: [] }
 
-const NO_BRANCHES = "No branches yet · b forks here into a real OpenCode session; nothing is copied or deleted."
+const NO_BRANCHES = "No branches yet · gb forks here into a real OpenCode session; nothing is copied or deleted."
 
 /** The `?` pane: unindented lines are headings, indented ones body (see the render).
  *  It sits under the rows, so the tree stays on screen while you read it. */
 const HELP = [
   `? help · ? or esc closes · opencode-context-tree ${PLUGIN_VERSION}`,
   "Move",
-  "  ↑↓ j k · J K by 20 · ctrl+f ctrl+b page · ctrl+d ctrl+u half page · gg top · G bottom",
+  "  ↑↓ j k · ctrl+f ctrl+b page · ctrl+d ctrl+u half page · H M L screen top/middle/bottom · gg G",
   "  { } turn rows (the lanes scrub with them) · [[ ]] (or [ ]) branch rows",
-  "  h l ← → fold/unfold a branch · Tab (or e) toggle · / live search · n N next/prev match",
+  "  h l ← → fold/unfold a branch · Tab toggle · / live search · n N next/prev match",
   "  za fold this turn · zo zc open/close · zr all open · zm all folded · zj zk between folds",
   "Act",
   "  ⏎ go — a ⎇ header switches to it · a user turn forks & prefills it · a step forks after it",
   "     then: no summary · summarize everything below that point · summarize with your own prompt (esc stays put)",
-  "  b branch · m merge · c crop mode (space mark · a auto · t result⇄turn · ⏎ apply · esc leave)",
-  "  u undo (alias x) · L label · y copy · E export decisions",
+  "  gb branch · gm merge · c crop mode (space mark · a auto · t result⇄turn · ⏎ apply · esc leave)",
+  "  u undo · m mark (label) · y copy · ge export decisions",
   "Views",
-  "  i inspector · I full screen · PgUp/PgDn scroll it · 1 2 lanes (duration/turns x-axis) · 0 off",
-  "  s consumers · D decisions · f F filter",
+  "  i inspector · I full screen · PgUp/PgDn scroll it · g1 g2 lanes (duration/turns x-axis) · g0 off",
+  "  gs consumers · gd decisions · gf filter",
   "Legend",
   "  ● user · ○ assistant · ⚙ tool step · ◆ decision · ≣ summary · ⎇ branch (a real OpenCode session)",
   "  │ ├ ╰ draw the topology · ▾ open ▸ folded · ← here is the session you are in",
@@ -240,7 +246,7 @@ const HELP = [
   "  ⎇ colours: open green · squashed blue · rejected/discarded red · abandoned grey",
   "  lanes: Input green you / grey context · Model purple answer / grey thinking · Tools orange call / red failed",
   "  the lanes are a window that follows the cursor: …N / N… are events hidden either side, all = whole session",
-  "  │ in the lanes is a turn boundary · the lanes show what the f filter shows (f → tools-only = just calls)",
+  "  │ in the lanes is a turn boundary · the lanes show what the gf filter shows (→ tools-only = just calls)",
 ]
 
 /** `f` opens this as a picker; `F` steps back through it (DESIGN.md §7.5). */
@@ -1310,7 +1316,7 @@ export function TreeRoute(props: TreeRouteProps) {
     if (!sessionID) return
     const b = branchOfCurrent()
     if (!b || b.status !== "open") {
-      notify(b ? `⎇ ${branchLabel(api, sessionID, b.name, 24)} is already ${b.status}` : "no open branch to merge · b starts one")
+      notify(b ? `⎇ ${branchLabel(api, sessionID, b.name, 24)} is already ${b.status}` : "no open branch to merge · gb starts one")
       return
     }
     const siblings = Object.values(state().sessions).filter((x) => x.parentSessionID === b.parentSessionID && x.sessionID !== sessionID && x.status === "open").length
@@ -1381,6 +1387,17 @@ export function TreeRoute(props: TreeRouteProps) {
       return
     }
     setSelected((i) => moveSelection(view().rows, i, delta))
+  }
+
+  /** vim's `H` / `M` / `L`: the cursor moves to what is already on screen, the window does not
+   *  move. Separators are decoration, so land on the nearest row that can hold a cursor. */
+  function toScreen(where: "top" | "middle" | "bottom") {
+    const rows = view().rows
+    if (rows.length === 0) return
+    const start = windowStart()
+    const end = Math.min(rows.length, start + rowsHeight()) - 1
+    const want = where === "top" ? start : where === "bottom" ? end : start + Math.floor((end - start) / 2)
+    setSelected(moveSelection(rows, Math.max(start, Math.min(end, want)), 0))
   }
 
   /** `ctrl+f` / `ctrl+b`: a whole screen, vim's page motion. One row of overlap, as vim
@@ -1468,8 +1485,9 @@ export function TreeRoute(props: TreeRouteProps) {
     commands: [
       { name: "ctree.up", hidden: true, run: () => moveIndex(-1) },
       { name: "ctree.down", hidden: true, run: () => moveIndex(1) },
-      { name: "ctree.jump_up", hidden: true, enabled: treePanel, run: () => moveIndex(-20) },
-      { name: "ctree.jump_down", hidden: true, enabled: treePanel, run: () => moveIndex(20) },
+      { name: "ctree.screen_top", hidden: true, enabled: treePanel, run: () => toScreen("top") },
+      { name: "ctree.screen_middle", hidden: true, enabled: treePanel, run: () => toScreen("middle") },
+      { name: "ctree.screen_bottom", hidden: true, enabled: treePanel, run: () => toScreen("bottom") },
       { name: "ctree.half_up", hidden: true, run: () => halfPage(-1) },
       { name: "ctree.half_down", hidden: true, run: () => halfPage(1) },
       { name: "ctree.page_up", hidden: true, run: () => page(-1) },
@@ -1687,7 +1705,7 @@ export function TreeRoute(props: TreeRouteProps) {
     if (panel() === "decisions") return "⏎ jump to record  E export  q back"
     if (panel() === "consumers") return "⏎ expand  space mark  c crop  q back"
     if (panel() === "help") return "esc/q back"
-    return `${goVerb()}  b branch  m merge  c crop  ${UNDO_KEY} undo  s consumers  ? help  q back`
+    return `${goVerb()}  gb branch  gm merge  c crop  ${UNDO_KEY} undo  gs consumers  ? help  q back`
   }
 
   const showsTree = () => panel() === "tree" || panel() === "help"
@@ -1727,7 +1745,7 @@ export function TreeRoute(props: TreeRouteProps) {
             <Show when={!layout().empty.tools} fallback={<text fg={t.textMuted}>{"no tool calls".padEnd(laneWidth())}</text>}>
               <For each={toolRuns()}>{(r) => <text fg={r.fg as never} bg={r.bg as never}>{r.text}</text>}</For>
             </Show>
-            <text fg={t.textMuted}>{"   i inspector · s consumers"}</text>
+            <text fg={t.textMuted}>{"   i inspector · gs consumers"}</text>
           </box>
           <Show when={laneOverview()}>
             <box flexDirection="row">
@@ -1742,7 +1760,7 @@ export function TreeRoute(props: TreeRouteProps) {
       </Show>
       <text fg={cropMode() ? t.warning : searchMode() ? t.accent : t.textMuted}>│ {statusLine()}</text>
       <Show when={panel() === "decisions"}>
-        <text fg={t.accent}>│ ◆ decisions on this tree ({decisions().length}) · ⏎ jump to record · E export markdown · q back</text>
+        <text fg={t.accent}>│ ◆ decisions on this tree ({decisions().length}) · ⏎ jump to record · ge export markdown · q back</text>
         <Show when={decisions().length === 0}>
           <text fg={t.textMuted}>│ (none yet — /merge a branch to write one)</text>
         </Show>
