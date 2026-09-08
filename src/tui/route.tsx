@@ -459,7 +459,15 @@ export function TreeRoute(props: TreeRouteProps) {
     if (rows === built.rows) return built
     const indexById: Record<string, number> = {}
     rows.forEach((r, i) => (indexById[r.id] = i))
-    return { ...built, rows, indexById }
+    // "you are here" can be inside a fold now, and a fold stands for what it swallowed: hand
+    // the marker (and the cursor the resolver puts on it) to the turn row that ate it
+    let currentRowId = built.currentRowId
+    if (currentRowId !== undefined && indexById[currentRowId] === undefined) {
+      const owner = ownerTurnIndex(built.rows, built.indexById[currentRowId] ?? -1)
+      const id = owner >= 0 ? built.rows[owner]!.id : undefined
+      if (id !== undefined && indexById[id] !== undefined) currentRowId = id
+    }
+    return { ...built, rows, indexById, currentRowId }
   })
 
   // Keep the cursor sensible when the list is rebuilt.
