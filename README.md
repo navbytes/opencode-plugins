@@ -119,7 +119,7 @@ one question with Pi's three answers — fork clean, summarize everything below 
 or summarize it with your own prompt — and the answer is also the confirmation. The
 summary covers exactly the turns the move leaves behind.
 
-Turns older than the last three fold to one row each, so the outline reads as an outline
+Every turn but the one you are in folds to a single row, so the outline reads as an outline
 rather than a wall of tool calls:
 
 ```

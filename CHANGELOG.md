@@ -2,6 +2,11 @@
 
 ## 0.3.0-beta.2 — 2026-09-09
 
+- **The tree opens with only the current turn expanded**, not the last three. Everything above
+  the turn you are working in is scrollback, so it folds to one `●` row each and `/tree` reads
+  as a table of contents from the first frame. `za` (or `l`) opens any of them in one
+  keystroke, `zr` opens the lot, and the digest on each folded row still says what is inside.
+
 - **The status line now asks OpenCode for a frame when it changes.** OpenCode's renderer draws
   on demand, and nothing here ever called `requestRender()`: a signal changed from inside an
   `await` — every progress update, and every notice raised by a slow action — reached the

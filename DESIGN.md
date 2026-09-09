@@ -733,7 +733,7 @@ them is the skeleton you were skimming, so a turn collapses into its `●` row c
 swallowed: `● T7 add a retry to the flaky test   ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠`. Nothing escapes
 a fold — the digest is the whole story of what is inside it.
 
-*Posture.* `auto` (the default) keeps the **last 3 turns of the path you are on** open, so the
+*Posture.* `auto` (the default) keeps **the current turn of the path you are on** open, so the
 far scrollback compresses while the end you are working at stays in detail; `zm` folds every
 turn, `zr` opens every one. Hand-folds (`za`, `zo`, `zc`) win over the posture and live in the
 route, not in `api.kv`: your folds hold while the tree is open and every visit starts from the

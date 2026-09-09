@@ -117,7 +117,7 @@ appended to the trunk as a normal message.*
 ## Folding the tool calls away
 
 A turn where the model ran six tools is seven rows, and the one you skim for is the `●` user
-turn. So turns older than the **last three on your path** open folded, carrying what they hold:
+turn. So every turn but **the one you are working in** opens folded, carrying what it holds:
 
 ```
 │ ● T5 add a retry to the flaky test       ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠
