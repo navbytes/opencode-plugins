@@ -2,6 +2,32 @@
 
 ## 0.3.0-beta.2 — 2026-09-09
 
+- **The `?` pane teaches the verbs rather than listing them.** `crop`, `merge` and a
+  summarizing jump all do something specific to what the *model* is sent next, which no key
+  name gives away, so each verb now says what it is for — `gm merge — end a branch: one ◆
+  record of what you concluded lands on the trunk, not the noise` — and the pane opens by
+  saying what the tree is and that **nothing here rewrites your transcript**. The palette
+  entries and the headless `/ctree` description got the same treatment: purpose first.
+
+  The pane is longer than a short terminal now and it never scrolled — on 30 rows it cut at
+  "Views", hiding the verbs it exists to explain. It scrolls on the inspector's `PgUp`/`PgDn`,
+  and the footer says `12–29 of 33` when there is more.
+
+- **A decision guide: [Choosing what to do](docs/USAGE.md#choosing-what-to-do).** The docs
+  explained what each command does and never what to reach for. One comparative table — what
+  each preserves, what it costs, how to reverse it — a section per action, and an ordered
+  answer for "the gauge says 80%". The README's command table links into it per command.
+
+  It also documents an edge the design claimed the other way: **`u` has no undo for a landed
+  `≣` summary**. `planUndo` covers crops and branch open/close; `summary.recorded` folds to
+  nothing. After a fork the summary goes with the branch `u` abandons; after a switch the
+  message stays and has to be cropped.
+
+- `DEFAULT_KEYS` and the `?` text move to `core/help.ts`, so `test/help.test.ts` can hold them
+  against each other — every verb the pane names must be spelled the way the keymap binds it,
+  which is the drift that shipped a pane reading `b branch` after branch moved to `gb`. A new
+  `test/docs-links.test.ts` does the same for the README's anchors into the usage guide.
+
 - **The tree opens with only the current turn expanded**, not the last three. Everything above
   the turn you are working in is scrollback, so it folds to one `●` row each and `/tree` reads
   as a table of contents from the first frame. `za` (or `l`) opens any of them in one

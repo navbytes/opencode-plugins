@@ -245,14 +245,17 @@ full list without leaving the screen. Every key is rebindable — see `keybinds`
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| `/tree` (`ctrl+q`) | open the combined tree and trajectory view |
-| `/branch <name> [model]` | fork here into a named branch, optionally on a cheaper model |
-| `/merge [--pick \| --no-llm \| --discard \| --tournament]` | close the branch — see below |
-| `/crop [--top \| --auto …]` | stub fat tool results or drop whole turns from what the model sees |
-| `/undo` | revert the last branch, merge or crop |
-| `/decisions [--export]` | list or export decision records |
+Not sure which one you want? [**Choosing what to do**](docs/USAGE.md#choosing-what-to-do)
+compares them: what each preserves, what each costs, and what to press at 80% context.
+
+| Command | What it does | When |
+|---|---|---|
+| `/tree` (`ctrl+q`) | open the combined tree and trajectory view | [the loop](docs/USAGE.md#the-loop) |
+| `/branch <name> [model]` | fork here into a named branch, optionally on a cheaper model | [before the risky thing](docs/USAGE.md#branch--try-it-on-a-copy) |
+| `/merge [--pick \| --no-llm \| --discard \| --tournament]` | close the branch — see below | [when a branch has finished](docs/USAGE.md#merge--keep-the-conclusion-not-the-noise) |
+| `/crop [--top \| --auto …]` | stub fat tool results or drop whole turns from what the model sees | [when you can name the fat thing](docs/USAGE.md#crop--stop-sending-something-you-no-longer-need) |
+| `/undo` | revert the last branch, merge or crop | [what it does and does not cover](docs/USAGE.md#summarize-on-a-jump--carry-the-gist-back) |
+| `/decisions [--export]` | list or export decision records | — |
 
 `/merge` offers four ways to close a branch. **Squash** has the branch model draft a ◆
 decision record that you confirm in `$EDITOR`. **Squash without LLM** hands you the empty
