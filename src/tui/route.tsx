@@ -18,6 +18,7 @@ import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyT
 import { decisionSummary, exportDecisions, renderDecision } from "../core/decision.js"
 import { formatProgress, SPINNER_MS, type ProgressState } from "../core/progress.js"
 import { applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy } from "../core/fold.js"
+import { DEFAULT_KEYS, helpLines } from "../core/help.js"
 import { laneLabel, laneSuffix, layoutEventStrip, overviewTrack, stripIndexFor, windowFor, LANE_CHROME, type LaneMode, type StripCell } from "../core/lanes.js"
 import { bar, consumers, type Consumer, type ConsumerEntry } from "../core/consumers.js"
 import { hasEditor } from "./editor.js"
@@ -144,72 +145,6 @@ function segmentsOf(line: string, query: string, thought: string): Segment[] {
 }
 
 /** Vim-aligned defaults; every name is rebindable through the `keybinds` option. */
-const DEFAULT_KEYS: Record<string, string[]> = {
-  up: ["up", "k"],
-  down: ["down", "j"],
-  // vim's H / M / L: the top, middle and bottom of what is on screen
-  screen_top: ["shift+h"],
-  screen_middle: ["shift+m"],
-  screen_bottom: ["shift+l"],
-  half_up: ["ctrl+u"],
-  half_down: ["ctrl+d"],
-  page_up: ["ctrl+b"],
-  page_down: ["ctrl+f"],
-  // a sequence, so bare `g` is free (and never fires on its own)
-  first: ["gg"],
-  last: ["shift+g"],
-  // `[[` / `]]` is vim's section motion; the single-bracket spellings stay as aliases
-  prev_branch: ["[[", "["],
-  next_branch: ["]]", "]"],
-  prev_turn: ["{"],
-  next_turn: ["}"],
-  fold: ["left", "h"],
-  unfold: ["right", "l"],
-  // vim's fold vocabulary, on turns: the tree already had folds, it just had no verbs
-  fold_toggle: ["za"],
-  fold_open: ["zo"],
-  fold_close: ["zc"],
-  // vim spells "all folds" zR/zM, but this host's binding parser does not match a shifted
-  // second stroke (verified in the TUI e2e), and with a single fold level vim's own zr/zm
-  // — one level less/more folding — mean exactly the same thing here
-  fold_open_all: ["zr"],
-  fold_close_all: ["zm"],
-  next_fold: ["zj"],
-  prev_fold: ["zk"],
-  toggle: ["tab"],
-  go: ["return"],
-  branch: ["gb"],
-  crop: ["c"],
-  crop_toggle_mode: ["t"],
-  mark: ["space"],
-  auto: ["a"],
-  undo: ["u"],
-  merge: ["gm"],
-  inspector: ["i"],
-  inspector_full: ["shift+i"],
-  inspector_up: ["pageup"],
-  inspector_down: ["pagedown"],
-  consumers: ["gs"],
-  copy: ["y"],
-  // bare digits are counts in vim, so the lane modes move behind `g` and leave them free
-  mode_duration: ["g1"],
-  mode_turns: ["g2"],
-  lanes_off: ["g0"],
-  decisions: ["gd"],
-  export: ["ge"],
-  // vim's "set mark": a label is a bookmark on a message
-  label: ["m"],
-  filter_pick: ["gf"],
-  // no default: the picker replaced the step-back, and every free single stroke is a vim
-  // motion. Still a command, so `keybinds: { filter_prev: "..." }` can give it one.
-  filter_prev: [],
-  search: ["/"],
-  search_next: ["n"],
-  search_prev: ["shift+n"],
-  // terminals disagree on whether "?" carries the shift flag, so bind both spellings
-  help: ["?", "shift+/"],
-  back: ["q", "escape"],
-}
 
 /** Ceiling on the lines the inspector materialises for one field. The pane scrolls, so this is
  *  only a guard against building a huge array each render; `y` copies the untruncated text. */
@@ -220,34 +155,8 @@ const EMPTY_TRANSCRIPT: Transcript = { sessionID: "", title: "", status: "availa
 
 const NO_BRANCHES = "No branches yet · gb forks here into a real OpenCode session; nothing is copied or deleted."
 
-/** The `?` pane: unindented lines are headings, indented ones body (see the render).
- *  It sits under the rows, so the tree stays on screen while you read it. */
-const HELP = [
-  `? help · ? or esc closes · opencode-context-tree ${PLUGIN_VERSION}`,
-  "Move",
-  "  ↑↓ j k · ctrl+f ctrl+b page · ctrl+d ctrl+u half page · H M L screen top/middle/bottom · gg G",
-  "  { } turn rows (the lanes scrub with them) · [[ ]] (or [ ]) branch rows",
-  "  h l ← → fold/unfold a branch · Tab toggle · / live search · n N next/prev match",
-  "  za fold this turn · zo zc open/close · zr all open · zm all folded · zj zk between folds",
-  "Act",
-  "  ⏎ go — a ⎇ header switches to it · a user turn forks & prefills it · a step forks after it",
-  "     then: no summary · summarize everything below that point · summarize with your own prompt (esc stays put)",
-  "  gb branch · gm merge · c crop mode (space mark · a auto · t result⇄turn · ⏎ apply · esc leave)",
-  "  u undo · m mark (label) · y copy · ge export decisions",
-  "Views",
-  "  i inspector · I full screen · PgUp/PgDn scroll it · g1 g2 lanes (duration/turns x-axis) · g0 off",
-  "  gs consumers · gd decisions · gf filter",
-  "Legend",
-  "  ● user · ○ assistant · ⚙ tool step · ◆ decision · ≣ summary · ⎇ branch (a real OpenCode session)",
-  "  │ ├ ╰ draw the topology · ▾ open ▸ folded · ← here is the session you are in",
-  "  dim rows are not sent to the model; ── not in this branch's context ── is where your path forked",
-  "  right column is tokens; ~ estimated · ⚠ ≥10k · ✂ cropped · ✗ tool error",
-  "  status-line right: the prompt really sent at the cursor · history, not re-costed after a crop",
-  "  ⎇ colours: open green · squashed blue · rejected/discarded red · abandoned grey",
-  "  lanes: Input green you / grey context · Model purple answer / grey thinking · Tools orange call / red failed",
-  "  the lanes are a window that follows the cursor: …N / N… are events hidden either side, all = whole session",
-  "  │ in the lanes is a turn boundary · the lanes show what the gf filter shows (→ tools-only = just calls)",
-]
+
+const HELP = helpLines(PLUGIN_VERSION)
 
 /** `gf` opens this as a picker (DESIGN.md §7.5). `filter_prev` steps back through it, with no
  *  default key since every free single stroke means something in vim — `keybinds` can add one. */
@@ -312,6 +221,9 @@ export function TreeRoute(props: TreeRouteProps) {
   const [inspectorFull, setInspectorFull] = createSignal(false)
   /** First inspector line drawn: `PgUp`/`PgDn` move it, a new row resets it. */
   const [inspectorTop, setInspectorTop] = createSignal(0)
+  /** First `?` line drawn. The pane is longer than a short terminal, and what it teaches is
+   *  worth more than what fits, so it scrolls on the inspector's own keys. */
+  const [helpTop, setHelpTop] = createSignal(0)
   const [inspector, setInspector] = createSignal<boolean>(api.kv.get<boolean>("ctree.inspector", false))
   const [consumerIndex, setConsumerIndex] = createSignal(0)
   const [consumerOpen, setConsumerOpen] = createSignal<Set<string>>(new Set())
@@ -519,6 +431,11 @@ export function TreeRoute(props: TreeRouteProps) {
   const cols = () => size().cols
   // the `?` pane sits under the rows so the tree stays visible: it takes its space from them
   const helpHeight = () => (panel() === "help" ? Math.min(HELP.length, Math.max(0, size().rows - 12)) : 0)
+  const helpPane = () => paneWindow(HELP.length, helpHeight(), helpTop())
+  const helpVisible = () => HELP.slice(helpPane().start, helpPane().start + helpHeight())
+  function scrollHelp(dir: 1 | -1) {
+    setHelpTop(scrollPane(HELP.length, helpHeight(), helpTop(), dir))
+  }
   const width = () => Math.max(60, cols() - 4)
   // ---- lane geometry (the lanes themselves are further down) ----------------
   /** The strip fills the terminal, ending on the same column as the rows and the status line.
@@ -1599,8 +1516,8 @@ export function TreeRoute(props: TreeRouteProps) {
           setInspectorTop(0)
         },
       },
-      { name: "ctree.inspector_up", hidden: true, enabled: inspectorOpen, run: () => scrollInspector(-1) },
-      { name: "ctree.inspector_down", hidden: true, enabled: inspectorOpen, run: () => scrollInspector(1) },
+      { name: "ctree.inspector_up", hidden: true, enabled: () => inspectorOpen() || panel() === "help", run: () => (panel() === "help" ? scrollHelp(-1) : scrollInspector(-1)) },
+      { name: "ctree.inspector_down", hidden: true, enabled: () => inspectorOpen() || panel() === "help", run: () => (panel() === "help" ? scrollHelp(1) : scrollInspector(1)) },
       { name: "ctree.consumers", hidden: true, enabled: () => !inCrop(), run: () => setPanel(panel() === "consumers" ? "tree" : "consumers") },
       { name: "ctree.copy", hidden: true, enabled: () => treeIdle() || panel() === "consumers", run: () => copySelected() },
       { name: "ctree.mode_duration", hidden: true, enabled: treePanel, run: () => setLane("duration") },
@@ -1608,7 +1525,7 @@ export function TreeRoute(props: TreeRouteProps) {
       { name: "ctree.lanes_off", hidden: true, enabled: treePanel, run: () => { setLanesOn(false); api.kv.set("ctree.lanesOn", false) } },
       { name: "ctree.decisions", hidden: true, enabled: () => !inCrop(), run: () => setPanel(panel() === "decisions" ? "tree" : "decisions") },
       { name: "ctree.export", hidden: true, enabled: () => panel() === "decisions", run: () => exportDecisionsFile() },
-      { name: "ctree.help", hidden: true, run: () => setPanel(panel() === "help" ? "tree" : "help") },
+      { name: "ctree.help", hidden: true, run: () => { setHelpTop(0); setPanel(panel() === "help" ? "tree" : "help") } },
       {
         name: "ctree.back",
         hidden: true,
@@ -1733,7 +1650,10 @@ export function TreeRoute(props: TreeRouteProps) {
     if (cropMode()) return "space mark  a auto  t result⇄turn  ⏎ apply  esc leave"
     if (panel() === "decisions") return "⏎ jump to record  E export  q back"
     if (panel() === "consumers") return "⏎ expand  space mark  c crop  q back"
-    if (panel() === "help") return "esc/q back"
+    if (panel() === "help") {
+      const { from, to } = helpPane()
+      return to < HELP.length || from > 1 ? `${from}–${to} of ${HELP.length} · PgUp/PgDn scroll · esc/q back` : "esc/q back"
+    }
     return `${goVerb()}  gb branch  gm merge  c crop  ${UNDO_KEY} undo  gs consumers  ? help  q back`
   }
 
@@ -1900,7 +1820,7 @@ export function TreeRoute(props: TreeRouteProps) {
         {(l) => <text fg={t.textMuted}>│ {l}</text>}
       </For>
       {/* the help pane sits under the rows, so the tree it explains stays on screen */}
-      <For each={panel() === "help" ? HELP.slice(0, helpHeight()) : []}>{(l) => <text fg={l.startsWith(" ") ? t.textMuted : t.accent}>│ {l}</text>}</For>
+      <For each={panel() === "help" ? helpVisible() : []}>{(l) => <text fg={l.startsWith(" ") ? t.textMuted : t.accent}>│ {l}</text>}</For>
       </box>
       </Show>
       <Show when={showInspector() || showInspectorFull()}>

@@ -29,10 +29,10 @@ export type FoldSummary = {
 
 /**
  * How folded the tree is. `base` is the posture for turns the user has not touched:
- * `auto` keeps the last `openTurns` open (the working end stays detailed, the scrollback
- * compresses), `all` folds every turn (`zm`), `none` folds none (`zr`, and crop mode, which
- * needs every result on screen to mark). `manual` is the user's own `za`/`zo`/`zc`, which
- * wins over `base` — and lives only as long as the route is open.
+ * `auto` keeps the last `openTurns` open — one by default, the turn you are working in, with
+ * everything above it compressed; `all` folds every turn (`zm`); `none` folds none (`zr`, and
+ * crop mode, which needs every result on screen to mark). `manual` is the user's own
+ * `za`/`zo`/`zc`, which wins over `base` — and lives only as long as the route is open.
  */
 export type FoldPolicy = {
   base: "auto" | "all" | "none"
@@ -40,7 +40,10 @@ export type FoldPolicy = {
   manual: ReadonlyMap<string, boolean>
 }
 
-export const DEFAULT_OPEN_TURNS = 3
+/** How many turns the `auto` posture leaves open: the current one. The tree is an outline
+ *  first — everything above the turn you are working in is scrollback, and `za`/`l` opens any
+ *  of it in one keystroke. */
+export const DEFAULT_OPEN_TURNS = 1
 
 export const NO_FOLDS: FoldPolicy = { base: "none", openTurns: DEFAULT_OPEN_TURNS, manual: new Map() }
 

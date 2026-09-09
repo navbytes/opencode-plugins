@@ -114,10 +114,87 @@ a jump with nothing below the selected point skips the question too.
 Every confirmation repeats the promise: *your transcript is never rewritten; the record is
 appended to the trunk as a normal message.*
 
+## Choosing what to do
+
+Four things here spend or save context, and they differ in **what they preserve**, not just in
+how much they save. Picking the wrong one is how you lose the thing you wanted to keep.
+
+| you press | the model stops seeing | you keep | it costs | to reverse |
+|---|---|---|---|---|
+| `c` … `⏎` (result) | one fat tool *output* | the call, its arguments, everything else | nothing — no model call | `u` |
+| `c` `t` … `⏎` (turn) | a whole question and its answers | everything else on the path | nothing | `u` |
+| `gb` branch | nothing — nothing leaves this session | both lines of work, side by side | nothing (a fork is a copy) | `u` abandons the branch |
+| `⏎` → *Summarize* | the turns the move leaves behind | a `≣` summary of them, at the destination | one model call | see the note below |
+| `gm` merge → *Squash* | the branch's turns | one `◆` record of what you concluded, on the trunk | one model call + your edit | `u` re-opens the branch |
+| *(nothing — you wait)* | everything, replaced by OpenCode's own summary | whatever its compaction chose | automatic | **not reversible** |
+
+That last row is the reason the others exist. Auto-compaction is lossy and it picks for you;
+everything above lets you pick first.
+
+### Crop — stop sending something you no longer need
+
+Reach for it when the gauge is filling **and you can name the fat thing**: a test run that
+dumped 12k, a file read in full that has since been edited, an exploratory turn that went
+nowhere. It is the cheapest option — no model call, instant, and `u` puts the text back in
+context. The `⚠` marker (≥10k) and the `gs` consumers panel are there to find them for you.
+
+Two things to know: a crop changes what is **sent from your next turn**, not what is stored —
+your transcript keeps every character — and the model is told that `[cropped: …]` means
+"removed on purpose, ask if you need it back", so it will ask rather than hallucinate.
+
+### Branch — try it on a copy
+
+Reach for it **before** the risky thing, not after: a refactor you might throw away, a second
+opinion from a cheaper model, an approach you want to compare. A branch is a real OpenCode
+session forked at this point, so this session's context is untouched whatever happens on it,
+and you can hold two attempts side by side in the tree.
+
+Branching costs nothing and deletes nothing, which makes it the safe default whenever you
+catch yourself thinking "I hope this works".
+
+### Merge — keep the conclusion, not the noise
+
+Reach for it when a branch has **finished**, either way. *Squash* has the branch's own model
+draft a `◆` decision record, you confirm it in `$EDITOR`, and that one message lands on the
+trunk — the twenty noisy turns behind it stay on the branch, out of the trunk's context.
+*Discard* lands nothing and marks the branch rejected, with an optional note on why.
+
+This is the tool for "that whole line of enquiry is done" — where crop would be a hundred
+small decisions, merge is one.
+
+### Summarize on a jump — carry the gist back
+
+Reach for it when you are **going back to an earlier point** and the work you are leaving is
+worth remembering: `⏎` on an earlier row, then *Summarize everything below this point*. One
+model call drafts Goal / Constraints / Progress / Key decisions / Next steps for exactly the
+turns the move abandons, and it lands at the destination as one `≣` message.
+
+Answer *No summary* when the abandoned turns were a dead end — you get the clean fork with
+nothing carried over.
+
+**On reversing it:** `u` has no undo for a landed `≣` summary itself. After a *fork* the
+summary lives in the new branch, so `u` (which abandons that branch) takes it with you. After
+a *switch* into an existing session, the `≣` message stays — crop it (`c` `t`) if you want it
+gone.
+
+### At 80% context
+
+The gauge bands are `low` under 25%, `healthy` under 60%, `filling` under 85%, `red` above —
+and a separate warning fires inside OpenCode's compaction reserve, because that is the point
+where waiting stops being free. At `filling`, in order:
+
+1. **`gs`** — look at where the context actually went. Guessing wastes the effort.
+2. **`c` then `a` then `⏎`** — auto-marks every unprotected result ≥10k older than two turns.
+   Usually the largest single win, and it costs nothing.
+3. **`gm`** on any branch that is finished — a squash trades twenty turns for one record.
+4. If the weight is in the line of work you are *still on*, **`gb`** a branch and continue
+   there, or `⏎` back to a cleaner point with a summary. Both leave the heavy path intact
+   behind you rather than destroying it.
+
 ## Folding the tool calls away
 
 A turn where the model ran six tools is seven rows, and the one you skim for is the `●` user
-turn. So turns older than the **last three on your path** open folded, carrying what they hold:
+turn. So every turn but **the one you are working in** opens folded, carrying what it holds:
 
 ```
 │ ● T5 add a retry to the flaky test       ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠

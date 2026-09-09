@@ -40,6 +40,18 @@ describe("applyFolds", () => {
     expect(folded.filter(isFolded).length).toBeGreaterThan(0)
   })
 
+  test("the default posture leaves exactly one turn open: the one you are in", () => {
+    const rows = view().rows
+    const folded = applyFolds(rows, open())
+    const onPath = rows.flatMap((r) => (r.kind === "turn" && r.inContext ? [r.id] : []))
+    const stillOpen = onPath.filter((id) => folded.some((r) => r.kind === "turn" && r.id === id && !isFolded(r)))
+    // the last on-path turn, and nothing above it (turns with no steps never read as folded,
+    // so compare against the ones that own steps)
+    const owning = new Set(rows.flatMap((r, i) => (r.kind === "step" ? [rows[ownerTurnIndex(rows, i)]!.id] : [])))
+    expect(DEFAULT_OPEN_TURNS).toBe(1)
+    expect(stillOpen.filter((id) => owning.has(id))).toEqual([onPath.at(-1)!].filter((id) => owning.has(id)))
+  })
+
   test("a folded turn carries its steps' tokens, so the column still totals", () => {
     const rows = view().rows
     const before = rows.reduce((n, r) => n + (r.kind === "turn" || r.kind === "step" ? r.tokens : 0), 0)

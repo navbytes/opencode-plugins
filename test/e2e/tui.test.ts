@@ -408,6 +408,43 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
     }
   }, 300_000)
 
+  test("the ? pane teaches the verbs, and scrolls to the rest", async () => {
+    const m = await startMock({ tool: false })
+    const proj = await createProject({ mockPort: m.port })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    try {
+      const { screens } = await runTuiScreens({
+        projectDir: proj.dir,
+        keys: [
+          ["Ask anything", 1, "hello\r"],
+          ["mock reply", 8, "/tree"],
+          ["Context tree", 0.5, "\r"],
+          ["Context tree ·", 2, "?"],
+          ["Context tree ·", 2, "\x1b[6~"],
+          ["Context tree ·", 2, "\x1b[6~"],
+          ["Context tree ·", 2, "q"],
+          ["Ask anything|mock reply", 1, "\x03"],
+          ["", 1, "\x03"],
+        ],
+        timeoutSec: 180,
+        cols: 130,
+        rows: 30,
+        exitWhenDone: true,
+      })
+      await dumpScreens(screens)
+      const seen = (needle: string) => screens.some((x) => x.screen.includes(needle))
+      // the pane opens on what the tool is and what each verb is for
+      if (!seen("nothing here rewrites your transcript")) throw new Error(`the ? pane never opened. screens: ${screens.map((x) => x.label).join(" | ")}`)
+      expect(seen("gb branch — try something risky")).toBe(true)
+      // a 30-row terminal cannot hold it, so it says so and PgDn reaches the rest
+      expect(seen("PgUp/PgDn scroll")).toBe(true)
+      if (!seen("gs consumers — what is actually filling")) throw new Error("PgDn never reached the Views section of the ? pane")
+    } finally {
+      await m.stop()
+      await proj.cleanup()
+    }
+  }, 300_000)
+
   test("the g-prefixed verbs fire alongside gg", async () => {
     // `gg` was the only sequence in the keymap; the realignment put every plugin verb behind
     // `g`, so this proves the sequence tree branches rather than `gg` shadowing them
