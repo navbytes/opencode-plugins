@@ -8,7 +8,9 @@
  * first pass and lies to everyone who has rebound anything.
  */
 import { describe, expect, test } from "bun:test"
-import { DEFAULT_KEYS, footerLine, HELP_VERBS, helpLines, keyLabel, rowHint, type RowAffordance } from "../src/core/help.js"
+import { existsSync, readFileSync } from "node:fs"
+import path from "node:path"
+import { DEFAULT_KEYS, footerLine, HELP_VERBS, HELP_WIDTH, helpLines, helpSegments, keyLabel, keyLabels, rowHint, type RowAffordance } from "../src/core/help.js"
 
 /**
  * Every verb the pane must name, moved somewhere it could not possibly have been hardcoded —
@@ -32,8 +34,8 @@ for (const { name, overrides } of CASES) {
   const keys = (command: string) => overrides?.[command] ?? DEFAULT_KEYS[command] ?? []
   const lines = helpLines("1.2.3", overrides)
   const body = lines.join("\n")
-  /** A verb's line: indented, and naming the key. Headings are unindented by construction. */
-  const verbLines = lines.filter((l) => l.startsWith("  ") && l.includes(" — "))
+  /** A verb row: the `Act`/`Views` table shape — a key field, a name field, a purpose. */
+  const verbRows = helpSegments("1.2.3", overrides).filter((l) => l.some((s) => s.kind === "key") && l.some((s) => s.kind === "name"))
 
   describe(`the help pane spells keys the way the keymap binds them (${name})`, () => {
     for (const command of HELP_VERBS) {
@@ -42,9 +44,16 @@ for (const { name, overrides } of CASES) {
         expect(DEFAULT_KEYS[command], `${command} is missing from DEFAULT_KEYS`).toBeDefined()
         // an override may unbind a command outright; then the pane must simply not claim a key
         if (bound.length === 0) return
-        // the pane writes keys as the user types them: `gb`, `⏎`, `/`, `?`
-        const spellings = bound.map((k) => k.replace("return", "⏎").replace("escape", "esc").replace("shift+", ""))
-        expect(spellings.some((k) => body.includes(k)), `no line in the ? pane names ${command} (${bound.join(", ")})`).toBe(true)
+        // The pane writes keys as the user types them (`gb`, `⏎`, `/`, `?`) — and it must
+        // write them *as keys*: `route.tsx#helpColor` can only bolden a run it has been told
+        // is a key, so a spelling that leaked into a `text` run is invisible again, which is
+        // the exact defect this whole segment model exists to prevent.
+        const spellings = new Set(keyLabels(command, overrides))
+        const asKeys = helpSegments("1.2.3", overrides)
+          .flat()
+          .filter((x) => x.kind === "key")
+          .flatMap((x) => x.text.split(" "))
+        expect([...spellings].some((k) => asKeys.includes(k)), `the ? pane never names ${command} (${bound.join(", ")}) in a key segment`).toBe(true)
       })
     }
 
@@ -59,13 +68,17 @@ for (const { name, overrides } of CASES) {
     })
 
     test("an unbound verb takes its clause with it rather than leaving a headless one", () => {
+      // `keybinds: { branch: "none" }` used to leave "   branch — try something risky…": a
+      // line whose key is simply gone, which reads as a typo rather than as an option.
+      for (const line of helpSegments("1.2.3", overrides)) {
+        for (const s of line) {
+          expect(s.text.length, `an empty ${s.kind} segment — a key-shaped hole: ${JSON.stringify(line)}`).toBeGreaterThan(0)
+        }
+        // a name column with no key in front of it is the same hole, one layer up
+        const kinds = line.map((s) => s.kind)
+        if (kinds.includes("name")) expect(kinds.includes("key"), `a name with no key: ${JSON.stringify(line)}`).toBe(true)
+      }
       for (const l of lines) {
-        // `keybinds: { branch: "none" }` used to leave "   branch — try something risky…":
-        // a line whose key is simply gone, which reads as a typo rather than as an option.
-        // The pane has exactly three indents — a heading, a verb, a verb's continuation —
-        // so anything else is a key-shaped hole where the interpolation came out empty.
-        expect(l, `unexpected indent, probably an empty key: ${JSON.stringify(l)}`).toMatch(/^(\S| {2}\S| {5}\S)/)
-        expect(l, `a clause lost its key: ${l}`).not.toMatch(/^ +[a-z]+ — /)
         expect(l, `an empty clause survived: ${l}`).not.toMatch(/ · {2}|· ·/)
       }
     })
@@ -83,12 +96,34 @@ for (const { name, overrides } of CASES) {
   })
 
   describe(`the pane teaches, not just lists (${name})`, () => {
-    test("every verb line says what the key is for", () => {
-      // "gb branch — try something risky on a copy": a key, a name, and a reason
-      expect(verbLines.length).toBeGreaterThanOrEqual(8)
-      for (const line of verbLines) {
-        const [, purpose] = line.split(" — ")
-        expect(purpose?.trim().length ?? 0, `no purpose after the em dash: ${line}`).toBeGreaterThan(12)
+    test("every verb row is a key, a name and a reason", () => {
+      // `gm  merge    end a branch: …` — three fields, and the third is what a key list
+      // would leave out. This is the assertion the em-dash split used to stand in for.
+      expect(verbRows.length, "the Act and Views tables lost their rows").toBeGreaterThanOrEqual(8)
+      for (const line of verbRows) {
+        const key = line.find((s) => s.kind === "key")!
+        const name = line.find((s) => s.kind === "name")!
+        const purpose = line
+          .slice(line.indexOf(name) + 1)
+          .map((s) => s.text)
+          .join("")
+        expect(key.text.trim().length, `a verb row with no key: ${JSON.stringify(line)}`).toBeGreaterThan(0)
+        expect(name.text.trim().length, `a verb row with no name: ${JSON.stringify(line)}`).toBeGreaterThan(0)
+        expect(purpose.trim().length, `no purpose after the name: ${purpose}`).toBeGreaterThan(12)
+      }
+    })
+
+    test("a key is always drawn as a key, so the pane can make it the bright thing", () => {
+      // the whole reason the pane is segments: `route.tsx#helpColor` can only bolden a key
+      // it has been told about, and a key that leaked into a `text` run is invisible again
+      // compare *spellings*, since that is what a segment carries: `up` is drawn `↑`
+      const spelled = new Set(Object.keys(DEFAULT_KEYS).flatMap((command) => keyLabels(command, overrides)))
+      for (const line of helpSegments("1.2.3", overrides)) {
+        for (const s of line.filter((x) => x.kind === "key")) {
+          for (const stroke of s.text.split(" ")) {
+            expect(spelled.has(stroke), `"${stroke}" is drawn as a key but nothing binds it`).toBe(true)
+          }
+        }
       }
     })
 
@@ -96,10 +131,20 @@ for (const { name, overrides } of CASES) {
       expect(body).toContain("nothing here rewrites your transcript")
     })
 
-    test("lines fit a terminal row unwrapped", () => {
-      for (const line of lines) {
-        expect([...line].length, `too long to fit one row: ${line}`).toBeLessThanOrEqual(112)
+    test("lines fit the width they were laid out for, at every terminal worth having", () => {
+      // The budget is the *row* budget, not the terminal's: a help row is `│ ` inside a
+      // padding-1 box, so it gets `cols - HELP_CHROME`. Asserting against the raw terminal
+      // width is how nine lines came to clip at 100 columns with this test green.
+      for (const width of [HELP_WIDTH, 76, 56, 40]) {
+        for (const line of helpLines("1.2.3", overrides, width)) {
+          expect([...line].length, `${width + 4} columns: too long to fit one row: ${line}`).toBeLessThanOrEqual(width)
+        }
       }
+    })
+
+    test("narrowing drops clauses and clips prose — it never drops a row", () => {
+      const rows = (width: number) => helpLines("1.2.3", overrides, width).length
+      expect(rows(40)).toBe(rows(HELP_WIDTH))
     })
   })
 }
@@ -225,5 +270,31 @@ describe("footerLine", () => {
     expect([...line(33)].length).toBe(33)
     expect(line(33)).toContain("gb branch")
     expect(line(32)).not.toContain("gb branch")
+  })
+})
+
+/**
+ * `route.tsx` writes out `TextAttributes.BOLD` / `.DIM` rather than importing them: adding
+ * `@opentui/core` to the TUI bundle's runtime imports made the host fail to load the route
+ * entirely (the plugin has only ever imported `@opentui/solid`). This holds the two written
+ * constants against the real enum, which the test process *can* import.
+ */
+describe("the text attribute bits route.tsx writes out", () => {
+  test("still match @opentui/core", async () => {
+    const { TextAttributes } = await import("@opentui/core")
+    const source = readFileSync(path.join(import.meta.dir, "..", "src", "tui", "route.tsx"), "utf8")
+    const bold = Number(source.match(/^const BOLD = (\d+)$/m)?.[1])
+    const dim = Number(source.match(/^const DIM = (\d+)$/m)?.[1])
+    expect(bold, "route.tsx no longer declares `const BOLD = <n>`").not.toBeNaN()
+    expect(bold).toBe(TextAttributes.BOLD)
+    expect(dim).toBe(TextAttributes.DIM)
+  })
+
+  test("the TUI bundle imports only @opentui/solid at runtime", () => {
+    // dist is a build artefact; skip when it has not been built in this checkout
+    const dist = path.join(import.meta.dir, "..", "dist", "tui.js")
+    if (!existsSync(dist)) return
+    const imports = new Set(readFileSync(dist, "utf8").match(/@opentui\/[a-z]+/g) ?? [])
+    expect([...imports].sort()).toEqual(["@opentui/solid"])
   })
 })

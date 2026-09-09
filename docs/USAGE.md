@@ -260,7 +260,7 @@ Three things are deliberate:
 | `gf` | filter picker (default · no-tools · tools-only · user-only · labeled · all) |
 | `/` `n` `N` | live search: typing re-filters the rows, `⏎` keeps the filter, `esc` clears; `n` `N` next / previous match |
 | `y` | copy the selected text — the terminal's clipboard when it allows it, else `.opencode/context-tree/last-copy.txt` |
-| `?` | help pane under the tree: how to read the screen + every key (`?` or `esc` closes) |
+| `?` | help pane under the tree, so the rows it explains stay on screen: how to read them, and what every key is *for*. Keys are the bright, bold thing on it — you can scan for one rather than read. `Act` and `Views` are a key column and a name column, so you can look up either `gm` or "merge"; `Move` and `Legend` are packed behind a dim label. It is laid out for your terminal's width, and it scrolls with `PgUp`/`PgDn` with the footer naming the section (`12–29 of 34 · Act · …`). `?` or `esc` closes |
 | `q` `esc` | back (esc leaves crop mode / a panel / a search first) |
 
 The footer follows the panel and the row under the cursor — on the tree `⏎ fork & prefill

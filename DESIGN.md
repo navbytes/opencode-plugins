@@ -820,7 +820,47 @@ One row and one action, deliberately:
   unbound, crop mode and the `?` pane (both of which already own a key legend of their own)
   all render no hint at all.
 
-### 7.8 What we deliberately do not copy from DSH
+### 7.8 The `?` pane (0.3.0-beta.3)
+
+The pane opens **under** the tree rather than over it, so the rows it explains stay on screen
+— which makes the `Legend` a live reference rather than a memory test, and is why vertical
+space here is genuinely scarce: every row is paid for out of the tree.
+
+*Salience.* The pane's job is to let someone find **one key** without reading. That only works
+if a key is drawn differently from the prose around it, so the pane is a list of typed
+segments (`key`, `name`, `label`, `heading`, `glyph`, `strong`, `text`) that the route colours
+individually — `core/help.ts#helpSegments`, `route.tsx#helpColor`. Keys are the brightest and
+the only bold thing; headings are accent; prose is muted; the `│ ` gutter is always dim.
+Through 0.3.0-beta.2 this was exactly inverted — the route coloured whole lines, keyed on
+whether the line was indented, so headings (which name no keys) were the one accent-coloured
+thing and every key on the pane was muted.
+
+*Two layouts, and the split is the principle: **tabulate what the user cannot guess.***
+`Act` and `Views` name operations with no analogue anywhere else, so they get a key column and
+a name column and can be entered from either side — the keys if you think `gm`, the names if
+you think "merge". `Move` and `Legend` keep packed clauses behind a dim static label: twenty
+motion clauses tabulated would be twenty rows spent making vim's own keys the most prominent
+thing on the pane, which is the wrong trade for this audience.
+
+Column widths are measured **per section**, so one absurd rebind in `Act` cannot shift
+`Legend`; past an 8-column key the row alone goes ragged rather than pushing its whole
+section right, as `:help` does. Rejected: a two-column pane (at 100 columns each column gets
+~46, and the teaching sentences are 66–81 — it would convert the pane into the key list it
+deliberately is not, and is impossible at 80); a strict `:help` key column throughout (see
+`Move` above); a separate `Legend` pane (modality, and it needs a key).
+
+*Width.* The pane is laid out for the terminal it is on: `cols - HELP_CHROME`, where the 4
+columns are the box's padding and the `│ ` gutter. Clauses drop from the right and prose
+clips with `…` — never wrapping, per §7.6 — so the same 34 rows survive from 100 columns down
+to 44. Before this it was written for a fixed width and asserted against the raw terminal
+number, so nine lines clipped at 100 columns with the test green.
+
+*Where am I.* The footer names the section (`12–29 of 34 · Act · PgUp/PgDn scroll · q/esc
+back`), because on a 24-row terminal you see 12 of 34 rows and the headings scroll off.
+Rejected: snapping PgUp/PgDn to section boundaries — `Legend` is 8 rows and would not fit a
+short terminal's window, so snapping would sometimes strand you.
+
+### 7.9 What we deliberately do not copy from DSH
 
 DSH is a web GUI with unlimited space and mouse; its Payload/Schema tabs show full
 JSON. In the TUI, Payload is pretty-printed and truncated with `y` to copy the full

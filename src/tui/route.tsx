@@ -18,7 +18,7 @@ import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyT
 import { decisionSummary, exportDecisions, renderDecision } from "../core/decision.js"
 import { formatProgress, SPINNER_MS, type ProgressState } from "../core/progress.js"
 import { applyFolds, foldFlags, foldMark, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy } from "../core/fold.js"
-import { DEFAULT_KEYS, footerLine, helpLines, keyLabel, keyLabels, rowHint, type RowAffordance } from "../core/help.js"
+import { DEFAULT_KEYS, footerLine, HELP_CHROME, helpSegments, keyLabel, keyLabels, rowHint, type HelpSeg, type RowAffordance } from "../core/help.js"
 import { laneLabel, laneSuffix, layoutEventStrip, overviewTrack, stripIndexFor, windowFor, LANE_CHROME, type LaneMode, type StripCell } from "../core/lanes.js"
 import { bar, consumers, type Consumer, type ConsumerEntry } from "../core/consumers.js"
 import { hasEditor } from "./editor.js"
@@ -39,6 +39,61 @@ export type TreeRouteProps = {
   refresh?: () => number
   /** open directly on a secondary view */
   initialView?: "tree" | "decisions"
+}
+
+/**
+ * A help segment's colour and weight. The salience order is the point: a **key** is the
+ * brightest, boldest thing on the pane, because finding one key without reading is the only
+ * reason anyone opens `?`. Headings are accent, prose is muted, and a glyph is drawn in the
+ * colour the tree itself draws it — a legend that spells "green" in grey is a bug in a
+ * renderer that can just show you the green.
+ */
+function helpColor(t: TuiPluginApi["theme"]["current"], s: HelpSeg): unknown {
+  if (s.tone) {
+    switch (s.tone) {
+      case "success":
+        return t.success
+      case "info":
+        return t.info
+      case "error":
+        return t.error
+      case "warning":
+        return t.warning
+      case "accent":
+        return t.accent
+      case "muted":
+        return t.textMuted
+    }
+  }
+  switch (s.kind) {
+    case "heading":
+      return t.accent
+    case "key":
+    case "strong":
+    case "name":
+    case "glyph":
+      return t.text
+    case "label":
+      return t.accent
+    default:
+      return t.textMuted
+  }
+}
+
+/**
+ * `@opentui/core`'s `TextAttributes` bits, written out rather than imported: the plugin has
+ * only ever imported `@opentui/solid` at runtime, and adding `@opentui/core` to the bundle's
+ * imports made the host fail to load the route at all (caught by the `?` pane e2e). They are
+ * a stable public enum and `test/help.test.ts` pins these two against it.
+ */
+const BOLD = 1
+const DIM = 2
+
+/** Bold what you scan for, dim the label column that only anchors it. */
+function helpAttrs(s: HelpSeg): number {
+  if (s.kind === "key" || s.kind === "heading" || s.kind === "strong") return BOLD
+  if (s.kind === "label") return DIM
+  return 0
 }
 
 function statusColor(t: TuiPluginApi["theme"]["current"], status: Row & { kind: "branch" }): unknown {
@@ -228,8 +283,6 @@ export function TreeRoute(props: TreeRouteProps) {
   /** First `?` line drawn. The pane is longer than a short terminal, and what it teaches is
    *  worth more than what fits, so it scrolls on the inspector's own keys. */
   const [helpTop, setHelpTop] = createSignal(0)
-  /** The pane names live bindings, so a `keybinds` override changes what it says. */
-  const HELP = createMemo(() => helpLines(PLUGIN_VERSION, props.options.keybinds))
   const [inspector, setInspector] = createSignal<boolean>(api.kv.get<boolean>("ctree.inspector", false))
   const [consumerIndex, setConsumerIndex] = createSignal(0)
   const [consumerOpen, setConsumerOpen] = createSignal<Set<string>>(new Set())
@@ -435,7 +488,12 @@ export function TreeRoute(props: TreeRouteProps) {
   api.renderer.on("resize", onResize)
   onCleanup(() => void api.renderer.off("resize", onResize))
   const cols = () => size().cols
-  // the `?` pane sits under the rows so the tree stays visible: it takes its space from them
+  // the `?` pane sits under the rows so the tree stays visible: it takes its space from them.
+  // It must be declared *after* `size`: a createMemo body runs the moment it is created, so
+  // reading `size()` from above its own declaration threw on every render of the route.
+  /** The pane names live bindings, so a `keybinds` override changes what it says — and it is
+   *  laid out for this terminal, so its columns and clauses fit rather than clip (§7.6). */
+  const HELP = createMemo(() => helpSegments(PLUGIN_VERSION, props.options.keybinds, Math.max(40, size().cols - HELP_CHROME)))
   const helpHeight = () => (panel() === "help" ? Math.min(HELP().length, Math.max(0, size().rows - 12)) : 0)
   const helpPane = () => paneWindow(HELP().length, helpHeight(), helpTop())
   const helpVisible = () => HELP().slice(helpPane().start, helpPane().start + helpHeight())
@@ -1725,7 +1783,18 @@ export function TreeRoute(props: TreeRouteProps) {
     if (panel() === "help") {
       const { from, to } = helpPane()
       const back = `${backVerb()} back`
-      return to < HELP().length || from > 1 ? `${from}–${to} of ${HELP().length} · ${scrollVerb()} · ${back}` : back
+      if (to >= HELP().length && from <= 1) return back
+      // which section you are in: the pane is a three-page scroll on a short terminal, and
+      // its headings scroll off, so page 2 was rows of verbs under no heading at all
+      let here = ""
+      for (let i = helpPane().start; i > 0; i--) {
+        const head = HELP()[i]?.[0]
+        if (head?.kind === "heading") {
+          here = `${head.text} · `
+          break
+        }
+      }
+      return `${from}–${to} of ${HELP().length} · ${here}${scrollVerb()} · ${back}`
     }
     return fitFooter(
       goVerb(),
@@ -1897,7 +1966,17 @@ export function TreeRoute(props: TreeRouteProps) {
         {(l) => <text fg={t.textMuted}>│ {l}</text>}
       </For>
       {/* the help pane sits under the rows, so the tree it explains stays on screen */}
-      <For each={panel() === "help" ? helpVisible() : []}>{(l) => <text fg={l.startsWith(" ") ? t.textMuted : t.accent}>│ {l}</text>}</For>
+      <For each={panel() === "help" ? helpVisible() : []}>
+        {(line) => (
+          <box flexDirection="row">
+            {/* the gutter is the tree's rule continuing down, so it is dim on every row —
+                it used to take the line's own colour, which made headings the brightest
+                thing on a pane whose whole job is to make *keys* findable */}
+            <text fg={t.textMuted}>│ </text>
+            <For each={line}>{(s) => <text fg={helpColor(t, s) as never} attributes={helpAttrs(s)}>{s.text}</text>}</For>
+          </box>
+        )}
+      </For>
       </box>
       </Show>
       <Show when={showInspector() || showInspectorFull()}>

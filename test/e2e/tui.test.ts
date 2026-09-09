@@ -456,10 +456,13 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
       const seen = (needle: string) => screens.some((x) => x.screen.includes(needle))
       // the pane opens on what the tool is and what each verb is for
       if (!seen("nothing here rewrites your transcript")) throw new Error(`the ? pane never opened. screens: ${screens.map((x) => x.label).join(" | ")}`)
-      expect(seen("gb branch — try something risky")).toBe(true)
+      // the Act table: a key field, a name field, a purpose — aligned at render time
+      expect(seen("gb  branch   a real OpenCode session")).toBe(true)
       // a 30-row terminal cannot hold it, so it says so and PgDn reaches the rest
       expect(seen("PgUp/PgDn scroll")).toBe(true)
-      if (!seen("gs consumers — what is actually filling")) throw new Error("PgDn never reached the Views section of the ? pane")
+      if (!seen("gs  consumers  what is actually filling")) throw new Error("PgDn never reached the Views section of the ? pane")
+      // the footer names the section you scrolled into, since the headings scroll off
+      expect(screens.some((x) => /\d+–\d+ of \d+ · (Act|Views|Legend|Move) · /.test(x.screen))).toBe(true)
     } finally {
       await m.stop()
       await proj.cleanup()
