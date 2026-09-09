@@ -5,6 +5,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { DEFAULT_KEYS } from "../src/core/help.js"
 import path from "node:path"
 
 const ROOT = path.join(import.meta.dir, "..")
@@ -40,5 +41,40 @@ describe("README → USAGE anchors", () => {
 
   test("the decision guide is reachable from the command table", () => {
     expect(links).toContain("choosing-what-to-do")
+  })
+})
+
+/**
+ * `keybinds` is documented by listing every command name it accepts. That list is a hand copy
+ * of `DEFAULT_KEYS`, so a new command is documented only if someone remembers to add it —
+ * and a user who guesses the name gets silence, since an unknown key is simply ignored.
+ */
+describe("the keybinds command list", () => {
+  // the fenced run of names between "names are" and the closing backtick
+  const listed = new Set(
+    (usage.match(/names are\s*\n?`([^`]+)`/)?.[1] ?? "")
+      .split(/\s+/)
+      .filter(Boolean),
+  )
+
+  test("the guide actually lists the names", () => {
+    expect(listed.size).toBeGreaterThan(30)
+  })
+
+  test("`open` is listed — it is the one command that is not a route key", () => {
+    expect(listed.has("open")).toBe(true)
+  })
+
+  for (const command of Object.keys(DEFAULT_KEYS)) {
+    test(`${command} is documented`, () => {
+      expect(listed.has(command), `docs/USAGE.md does not list "${command}" among the keybinds names`).toBe(true)
+    })
+  }
+
+  test("nothing is listed that no longer exists", () => {
+    for (const name of listed) {
+      if (name === "open") continue
+      expect(DEFAULT_KEYS[name], `docs/USAGE.md lists "${name}", which is not a command`).toBeDefined()
+    }
   })
 })

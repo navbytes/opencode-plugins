@@ -210,13 +210,18 @@ many were errors (`✗`), fat (`⚠` ≥10k) or already cropped (`✂`).
 |---|---|
 | `za` | toggle the turn you are on |
 | `zo` `zc` | open it · close it |
+| `l` `→` | open the folded turn under the cursor (vim opens a fold on a horizontal move; only opening — `h` `←` still fold a *branch*) |
 | `zr` `zm` | open every fold · fold every turn (`zm` is the pure outline: one row per turn) |
 | `zj` `zk` | jump to the next / previous folded turn |
+
+If you do not have these in your fingers, you do not have to: the row the cursor is on says
+what it can do and which key does it — `za open` on a folded turn, `za fold` on an open one —
+on that row only, so the rest of the outline stays clean.
 
 Three things are deliberate:
 
 - **Your folds beat the rule, and last as long as the tree is open.** `za` on a turn holds
-  whatever the last-3 rule thinks, until you leave `/tree` — so every visit starts from the
+  whatever the posture thinks, until you leave `/tree` — so every visit starts from the
   same clean outline rather than from folds you set days ago.
 - **Crop mode opens everything.** `c` needs the tool results on screen to mark them, so it
   unfolds while it runs and puts your folds back when you leave. A live `/` search does the
@@ -233,7 +238,7 @@ Three things are deliberate:
 | `H` `M` `L` | the top / middle / bottom row of what is on screen, without scrolling it |
 | `{` `}` | previous / next `●` turn row. From a step, `{` lands on the turn that owns it first — the way `{` leaves the paragraph you are inside — so it doubles as "top of this turn". With the lanes on, the two keys scrub the timeline turn by turn, because the strip already rules its boundaries there |
 | `[[` `]]` (or `[` `]`) | previous / next branch row |
-| `← →` `h l` · `Tab` | fold / unfold a branch inline |
+| `← →` `h l` · `Tab` | fold / unfold a branch inline. `l` `→` on a *folded turn* opens it instead, the way vim's `foldopen=hor` opens a fold on a horizontal move; `h` `←` never close one |
 | `za` · `zo` `zc` | fold / open / close the turn the cursor is in (from a step row, the turn that owns it — the cursor rides up to it) |
 | `zr` `zm` | open every fold · fold every turn (vim spells these `zR`/`zM`; OpenCode's key parser does not match a shifted second stroke, and with one fold level vim's `zr`/`zm` mean the same thing) |
 | `zj` `zk` | next / previous folded turn |
@@ -255,8 +260,16 @@ Three things are deliberate:
 | `q` `esc` | back (esc leaves crop mode / a panel / a search first) |
 
 The footer follows the panel and the row under the cursor — on the tree `⏎ fork & prefill
-this turn  gb branch  gm merge  c crop  u undo  gs consumers  ? help  q back`; the rest live
-behind `?`.
+this turn  gb branch  gm merge  c crop  u undo  gs consumers  ? help  q/esc back`; the rest
+live behind `?`. On a narrow terminal it drops verbs from the right until it fits, keeping
+`? help` last, since that is the way to everything it dropped.
+
+**You do not have to memorise any of this.** The row the cursor is on carries the key for the
+one thing it can do — `za open` on a folded turn, `za fold` on an open one, `→ expand` on a
+collapsed branch, `⏎ switch` on another branch, `space crop` on a fat tool result, `u restore`
+on a cropped one — and only that row, so the rest of the outline stays clean. Every key named
+anywhere on screen is the key you actually have: rebind something under `keybinds` and the
+hints, the footers and the `?` pane all say the new one.
 
 The keys follow vim: `j k`, `ctrl+f`/`ctrl+b`, `ctrl+d`/`ctrl+u`, `gg`/`G`, `H M L`, `{ }`,
 `[[ ]]`, `/ n N`, `y`, `u`, `m`, and the whole `z` fold family mean what they mean there. The

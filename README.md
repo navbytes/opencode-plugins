@@ -126,10 +126,12 @@ rather than a wall of tool calls:
 ● T5 add a retry to the flaky test        ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠
 ```
 
-`za` folds or opens the turn you are on, `zm` folds them all, `zr` opens them all — vim's own
-fold keys. Nothing is lost: the digest counts what is inside, the timeline still shows every
-event (a folded turn lights the whole span it stands for), and crop mode opens everything
-while you pick targets.
+`za` folds or opens the turn you are on, `l` opens the folded one under the cursor (vim opens
+a fold on a horizontal move), `zm` folds them all, `zr` opens them all — vim's own fold keys.
+And you do not have to know them: the row the cursor is on names the key for the one thing it
+affords, and only that row. Nothing is lost either — the digest counts what is inside, the
+timeline still shows every event (a folded turn lights the whole span it stands for), and crop
+mode opens everything while you pick targets.
 
 Drafting one takes a model call, so the status line shows it happening —
 `⠹ summarizing 3 turns · ~14k · Progress · 1.2k chars · 4s · esc cancels`: the step, the
@@ -224,7 +226,7 @@ full list without leaving the screen. Every key is rebindable — see `keybinds`
 | `j` `k` · `ctrl+f` `ctrl+b` · `ctrl+d` `ctrl+u` · `gg` `G` | move · page · half page · top / bottom |
 | `{` `}` | previous / next turn row — the outline's own unit; the lanes scrub with it |
 | `[[` `]]` (or `[` `]`) | previous / next branch row |
-| `h` `l` · `Tab` | fold / unfold a branch inline |
+| `h` `l` · `Tab` | fold / unfold a branch inline (`l` also opens a folded turn) |
 | `za` · `zo` `zc` | fold / open / close the turn you are on |
 | `zr` `zm` · `zj` `zk` | open every fold / fold every turn · move between folds |
 | `H` `M` `L` | top / middle / bottom of the screen |
