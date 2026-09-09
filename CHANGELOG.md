@@ -2,6 +2,38 @@
 
 ## 0.3.0-beta.2 — 2026-09-09
 
+- **The row under the cursor names the key that acts on it.** The keymap is vim's, which is
+  wonderful if you already know vim and opaque if you do not: nothing on screen ever said that
+  the `▸` on a folded turn opens with `za`. The cursor's row now carries a right-aligned hint
+  for the one thing it affords — `za open`, `za fold`, `→ expand`, `⏎ switch`, `space crop`,
+  `u restore` — and only the cursor's row, so it reads as cursor chrome, a live search never
+  matches it, and it costs nothing on the rows you are skimming past. It gives way to the
+  row's own text on a narrow terminal rather than clipping it.
+
+- **`l` / `→` opens a folded turn**, the way vim's `foldopen` default (`hor`) opens a fold on
+  a horizontal move. Only opening: nothing in vim closes a fold by moving, so `h` / `←` keep
+  their branch meaning and `za` / `zc` stay the way to close one. On a turn row this key did
+  nothing at all before, which is what left it free.
+
+- **Every key named on screen is read from the live keymap.** The `?` pane, all five footers,
+  the inspector's `Crop` line and the `zr` / `zm` notices spell their keys through
+  `keyLabel(command)` instead of a string literal, so a `keybinds` override changes what they
+  say rather than making them lie. `test/help.test.ts` now runs its whole suite twice — once
+  with every verb it documents rebound (and `branch` unbound outright), which is exactly what
+  a pane assembled from literals cannot survive. Two bugs it caught on the way in: the
+  decisions footer still advertised `E export` after export moved to `ge` in beta.1, and
+  `keyLabel` wrote a modifier with no separator, so a rebind to `ctrl+u` displayed as `ctrlu`.
+
+- `test/docs-links.test.ts` also holds the guide's `keybinds` command list against
+  `DEFAULT_KEYS` now: the list is a hand copy, and a name that is missing from it is a
+  rebind a user cannot discover — an unknown command name is silently ignored.
+
+- **The footers fit the terminal.** The tree footer was the only line on screen with no width
+  budget — the header and the status line both had one — and it overflowed at about 97
+  columns, more with a long branch name. `core/help.ts#footerLine` now drops verbs from the
+  right until the line fits, and `? help` is the last to go, being the route to everything it
+  dropped.
+
 - **The `?` pane teaches the verbs rather than listing them.** `crop`, `merge` and a
   summarizing jump all do something specific to what the *model* is sent next, which no key
   name gives away, so each verb now says what it is for — `gm merge — end a branch: one ◆

@@ -14,11 +14,11 @@ import { buildSpineMap, buildTreeView, currentChainOf, formatPromptAt, promptAtR
 import { ContextGauge } from "./gauge.js"
 import type { Transcript } from "../core/transcript.js"
 import type { JournalStore } from "../shared/store.js"
-import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyText, createNamedBranch, executeJump, executeUndo, jumpDialogOptions, jumpDialogTitle, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, MERGE_TRUST, setLabel, UNDO_KEY, type ActionContext, type MergeMode, type SummaryChoice } from "./actions.js"
+import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyText, createNamedBranch, executeJump, executeUndo, jumpDialogOptions, jumpDialogTitle, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, MERGE_TRUST, setLabel, type ActionContext, type MergeMode, type SummaryChoice } from "./actions.js"
 import { decisionSummary, exportDecisions, renderDecision } from "../core/decision.js"
 import { formatProgress, SPINNER_MS, type ProgressState } from "../core/progress.js"
 import { applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy } from "../core/fold.js"
-import { DEFAULT_KEYS, helpLines } from "../core/help.js"
+import { DEFAULT_KEYS, footerLine, helpLines, keyLabel, keyLabels, rowHint, type RowAffordance } from "../core/help.js"
 import { laneLabel, laneSuffix, layoutEventStrip, overviewTrack, stripIndexFor, windowFor, LANE_CHROME, type LaneMode, type StripCell } from "../core/lanes.js"
 import { bar, consumers, type Consumer, type ConsumerEntry } from "../core/consumers.js"
 import { hasEditor } from "./editor.js"
@@ -60,9 +60,12 @@ function plain(text: string): string {
   return text.replace(/\*\*|`/g, "")
 }
 
-function fitRow(body: string, tokens: string, width: number): string {
+function fitRow(body: string, tokens: string, width: number, hint = ""): string {
   const room = Math.max(10, width - tokens.length - 2)
-  const clipped = body.length > room ? `${body.slice(0, room - 1)}…` : body.padEnd(room)
+  // the hint is chrome on the cursor's row: it gives way to the row's own text rather than
+  // clipping it, so a narrow terminal simply loses the hint (§7.6's "dropped, not wrapped")
+  const withHint = hint && room - body.length >= hint.length + 4 ? `${body.padEnd(room - hint.length - 1)}${hint} ` : body
+  const clipped = withHint.length > room ? `${withHint.slice(0, room - 1)}…` : withHint.padEnd(room)
   return `${clipped} ${tokens}`
 }
 
@@ -94,7 +97,7 @@ function thoughtOf(row: Row): string {
   return ` · ${(row.thinkingMs / 1000).toFixed(row.thinkingMs < 10_000 ? 1 : 0)}s thought`
 }
 
-function rowLine(row: Row, width: number, here: boolean): string {
+function rowLine(row: Row, width: number, here: boolean, hint = ""): string {
   // decoration, not content: no glyph, no token column
   if (row.kind === "separator") return `${row.gutter}${row.text}`
   const tokens = `${row.kind !== "branch" && row.estimated ? "~" : ""}${formatK(row.tokens)}`
@@ -115,7 +118,7 @@ function rowLine(row: Row, width: number, here: boolean): string {
     const dur = row.kind === "step" && row.durationMs !== undefined ? ` ${(row.durationMs / 1000).toFixed(row.durationMs < 10_000 ? 1 : 0)}s` : ""
     body = `${row.gutter}${glyphOf(row)} ${textOf(row)}${flags}${dur}${thoughtOf(row)}${marker}`
   }
-  return fitRow(body, tokens, width)
+  return fitRow(body, tokens, width, hint)
 }
 
 /** A rendered row split for colour: the live search hit and the dim `…s thought` tail.
@@ -155,8 +158,6 @@ const EMPTY_TRANSCRIPT: Transcript = { sessionID: "", title: "", status: "availa
 
 const NO_BRANCHES = "No branches yet · gb forks here into a real OpenCode session; nothing is copied or deleted."
 
-
-const HELP = helpLines(PLUGIN_VERSION)
 
 /** `gf` opens this as a picker (DESIGN.md §7.5). `filter_prev` steps back through it, with no
  *  default key since every free single stroke means something in vim — `keybinds` can add one. */
@@ -224,6 +225,8 @@ export function TreeRoute(props: TreeRouteProps) {
   /** First `?` line drawn. The pane is longer than a short terminal, and what it teaches is
    *  worth more than what fits, so it scrolls on the inspector's own keys. */
   const [helpTop, setHelpTop] = createSignal(0)
+  /** The pane names live bindings, so a `keybinds` override changes what it says. */
+  const HELP = createMemo(() => helpLines(PLUGIN_VERSION, props.options.keybinds))
   const [inspector, setInspector] = createSignal<boolean>(api.kv.get<boolean>("ctree.inspector", false))
   const [consumerIndex, setConsumerIndex] = createSignal(0)
   const [consumerOpen, setConsumerOpen] = createSignal<Set<string>>(new Set())
@@ -268,7 +271,7 @@ export function TreeRoute(props: TreeRouteProps) {
     setProgress({ ...state, startedAt: open && open.label === state.label ? open.startedAt : Date.now() })
     paint()
   }
-  const ctx: ActionContext = { api, store, directory, notify, progress: reportProgress }
+  const ctx: ActionContext = { api, store, directory, notify, progress: reportProgress, keybinds: props.options.keybinds }
 
   // One interval for as long as something is running, rather than a permanently ticking route.
   // `requestLive` is the renderer's own refcounted "keep drawing frames" request — the same
@@ -430,11 +433,11 @@ export function TreeRoute(props: TreeRouteProps) {
   onCleanup(() => void api.renderer.off("resize", onResize))
   const cols = () => size().cols
   // the `?` pane sits under the rows so the tree stays visible: it takes its space from them
-  const helpHeight = () => (panel() === "help" ? Math.min(HELP.length, Math.max(0, size().rows - 12)) : 0)
-  const helpPane = () => paneWindow(HELP.length, helpHeight(), helpTop())
-  const helpVisible = () => HELP.slice(helpPane().start, helpPane().start + helpHeight())
+  const helpHeight = () => (panel() === "help" ? Math.min(HELP().length, Math.max(0, size().rows - 12)) : 0)
+  const helpPane = () => paneWindow(HELP().length, helpHeight(), helpTop())
+  const helpVisible = () => HELP().slice(helpPane().start, helpPane().start + helpHeight())
   function scrollHelp(dir: 1 | -1) {
-    setHelpTop(scrollPane(HELP.length, helpHeight(), helpTop(), dir))
+    setHelpTop(scrollPane(HELP().length, helpHeight(), helpTop(), dir))
   }
   const width = () => Math.max(60, cols() - 4)
   // ---- lane geometry (the lanes themselves are further down) ----------------
@@ -503,6 +506,29 @@ export function TreeRoute(props: TreeRouteProps) {
     const list: (ResultCandidate | TurnCandidate)[] = cropMode() === "result" ? resultCands() : turnCands()
     return list.filter((c) => m.has(markKey(c)))
   })
+
+  /**
+   * What the row under the cursor can do next — the one action worth naming on it. Folding
+   * comes first because the default outline is mostly folded turns, and `▸` is the only
+   * affordance a `za`-shaped key has ever had.
+   */
+  function affordanceOf(row: Row): RowAffordance | undefined {
+    if (cropMode() || panel() !== "tree") return undefined
+    if (row.kind === "branch") return row.expanded ? (row.isCurrent ? undefined : { kind: "branch-switch" }) : { kind: "branch-expand" }
+    if (row.kind === "separator") return undefined
+    if (row.kind === "turn") {
+      if (isFolded(row)) return { kind: "fold-open" }
+      const rows = view().rows
+      const i = rows.indexOf(row)
+      return i >= 0 && rows[i + 1]?.kind === "step" ? { kind: "fold-close" } : undefined
+    }
+    if (row.isCropped) return { kind: "restore" }
+    return candidateOf(row) ? { kind: "crop" } : undefined
+  }
+  const selectedHint = () => {
+    const row = current()
+    return row ? rowHint(affordanceOf(row), props.options.keybinds) : ""
+  }
 
   /** The crop mode a row can be marked in, so `space` alone can enter crop mode on it. */
   function modeForRow(row: Row): "result" | "turn" | undefined {
@@ -762,7 +788,13 @@ export function TreeRoute(props: TreeRouteProps) {
       kv("Turns", String(row.turns))
       kv("Tokens", `~${formatK(row.tokens)}`)
       if (row.model) kv("Model", row.model)
-      muted(row.isCurrent ? "you are here" : row.expanded ? "← fold" : "→ expand · ⏎ switch to it")
+      muted(
+        row.isCurrent
+          ? "you are here"
+          : row.expanded
+            ? `${keyLabel("fold", props.options.keybinds)} fold`
+            : `${keyLabel("unfold", props.options.keybinds)} expand · ${keyLabel("go", props.options.keybinds)} switch to it`,
+      )
       return out
     }
     const tr = row.sessionID === sessionID ? live() : others()[row.sessionID]
@@ -810,7 +842,16 @@ export function TreeRoute(props: TreeRouteProps) {
       block("Result", String(st?.output ?? ""))
       kv("Timing", st?.time?.start ? `started ${new Date(st.time.start).toISOString().slice(11, 23)} · ${dur} · session ts` : "n/a")
       const cand = resultCands().find((c) => c.partID === (currentPartOf(row) ?? row.partID))
-      kv("Crop", row.isCropped ? `✂ cropped (${UNDO_KEY} to restore)` : cand ? (cand.protections.length ? `protected: ${cand.protections.join(", ")}` : "c then space to stub this result") : "n/a")
+      kv(
+        "Crop",
+        row.isCropped
+          ? `✂ cropped (${keyLabel("undo", props.options.keybinds)} to restore)`
+          : cand
+            ? cand.protections.length
+              ? `protected: ${cand.protections.join(", ")}`
+              : `${keyLabel("crop", props.options.keybinds)} then ${keyLabel("mark", props.options.keybinds)} to stub this result`
+            : "n/a",
+      )
     } else {
       kv("Tokens", `~${formatK(row.tokens)}`)
       if (row.durationMs !== undefined) kv("Duration", `${(row.durationMs / 1000).toFixed(1)} s`)
@@ -965,8 +1006,8 @@ export function TreeRoute(props: TreeRouteProps) {
   function askJump(plan: JumpPlan & { kind: "switch" | "fork" }, tail: AbandonedTail, title: string): Promise<SummaryChoice | undefined> {
     const note =
       plan.kind === "switch"
-        ? `The session you are on now stays exactly as it is. ${UNDO_KEY} undoes this.`
-        : `A new OpenCode session forks from ${sessionLabel(plan.sessionID)} at this point; nothing is deleted. ${UNDO_KEY} undoes this.`
+        ? `The session you are on now stays exactly as it is. ${keyLabel("undo", props.options.keybinds)} undoes this.`
+        : `A new OpenCode session forks from ${sessionLabel(plan.sessionID)} at this point; nothing is deleted. ${keyLabel("undo", props.options.keybinds)} undoes this.`
     if (props.options.jumpSummary === "never" || tail.messages.length === 0) return confirm(title, note).then((ok) => (ok ? { kind: "none" } : undefined))
 
     return new Promise((resolve) => {
@@ -1119,7 +1160,7 @@ export function TreeRoute(props: TreeRouteProps) {
           notify("summary cancelled — nothing moved")
           return
         }
-        if (out.target) api.ui.toast({ message: `moved to ${sessionLabel(out.target)} · ${UNDO_KEY} undoes it` })
+        if (out.target) api.ui.toast({ message: `moved to ${sessionLabel(out.target)} · ${keyLabel("undo", props.options.keybinds)} undoes it` })
       } finally {
         setSummaryAbort(undefined)
       }
@@ -1218,12 +1259,26 @@ export function TreeRoute(props: TreeRouteProps) {
   function foldAll(base: FoldPolicy["base"]) {
     setFoldBase(base)
     setManualFolds(new Map())
-    notify(base === "all" ? "all turns folded — zr opens them" : "all turns open — zm folds them")
+    const open = keyLabel("fold_open_all", props.options.keybinds)
+    const shut = keyLabel("fold_close_all", props.options.keybinds)
+    notify(base === "all" ? `all turns folded — ${open} opens them` : `all turns open — ${shut} folds them`)
   }
 
   function foldOrUnfold(open: boolean) {
     const row = current()
     if (!row) return
+    // vim opens a closed fold on a horizontal movement (`:h foldopen`, whose default includes
+    // `hor`), so `l`/`→` opens the turn under the cursor. Only opening: nothing in vim closes
+    // a fold by moving, so `h`/`←` keep their branch meaning and `za`/`zc` stay the way to
+    // close one. On a turn row this key did nothing at all before.
+    if (open) {
+      const rows = view().rows
+      const owner = rows[ownerTurnIndex(rows, selected())]
+      if (owner && isFolded(owner)) {
+        foldTurn("open")
+        return
+      }
+    }
     const target = row.kind === "separator" ? undefined : row.kind === "branch" || row.depth > 0 ? row.sessionID : undefined
     if (!target) return
     // the row's resolved state, not raw set membership: on-path branches start open, so
@@ -1638,23 +1693,42 @@ export function TreeRoute(props: TreeRouteProps) {
   /** `⏎` does four different things; the footer says which one for the row under the cursor. */
   const goVerb = () => {
     const row = current()
-    if (!row) return "⏎ go"
-    if (row.kind === "branch") return row.isCurrent ? "⏎ you are here" : `⏎ switch to ⎇ ${clipTo(row.name, 20)}`
-    if (row.kind === "separator") return "⏎ go"
-    if (row.id === view().currentRowId) return "⏎ you are here"
-    return row.kind === "turn" ? "⏎ fork & prefill this turn" : "⏎ fork after this step"
+    const go = keyLabel("go", props.options.keybinds)
+    if (!row) return `${go} go`
+    if (row.kind === "branch") return row.isCurrent ? `${go} you are here` : `${go} switch to ⎇ ${clipTo(row.name, 20)}`
+    if (row.kind === "separator") return `${go} go`
+    if (row.id === view().currentRowId) return `${go} you are here`
+    return row.kind === "turn" ? `${go} fork & prefill this turn` : `${go} fork after this step`
   }
 
+  /** A footer verb, named by the key that is bound to it now. "" when nothing is. */
+  const verb = (command: string, name: string) => {
+    const key = keyLabel(command, props.options.keybinds)
+    return key ? `${key} ${name}` : ""
+  }
+  const scrollVerb = () => `${keyLabel("inspector_up", props.options.keybinds)}/${keyLabel("inspector_down", props.options.keybinds)} scroll`
+  const backVerb = () => keyLabels("back", props.options.keybinds).join("/")
+
+  /** `core/help.ts#footerLine` at this terminal's width — the box spends 4 columns on chrome. */
+  const fitFooter = (head: string, verbs: string[], tail: string) => footerLine(head, verbs, tail, cols() - 4)
+
   const footer = () => {
-    if (showInspectorFull()) return `PgUp/PgDn scroll  y copy  ${cols() >= 110 ? "I pane  " : ""}i close  q back`
-    if (cropMode()) return "space mark  a auto  t result⇄turn  ⏎ apply  esc leave"
-    if (panel() === "decisions") return "⏎ jump to record  E export  q back"
-    if (panel() === "consumers") return "⏎ expand  space mark  c crop  q back"
+    if (showInspectorFull())
+      return fitFooter(`${scrollVerb()}`, [verb("copy", "copy"), cols() >= 110 ? verb("inspector_full", "pane") : ""], `${verb("inspector", "close")}  ${backVerb()} back`)
+    if (cropMode())
+      return fitFooter(verb("mark", "mark"), [verb("auto", "auto"), verb("crop_toggle_mode", "result⇄turn")], `${verb("go", "apply")}  esc leave`)
+    if (panel() === "decisions") return fitFooter(verb("go", "jump to record"), [verb("export", "export")], `${backVerb()} back`)
+    if (panel() === "consumers") return fitFooter(verb("go", "expand"), [verb("mark", "mark"), verb("crop", "crop")], `${backVerb()} back`)
     if (panel() === "help") {
       const { from, to } = helpPane()
-      return to < HELP.length || from > 1 ? `${from}–${to} of ${HELP.length} · PgUp/PgDn scroll · esc/q back` : "esc/q back"
+      const back = `${backVerb()} back`
+      return to < HELP().length || from > 1 ? `${from}–${to} of ${HELP().length} · ${scrollVerb()} · ${back}` : back
     }
-    return `${goVerb()}  gb branch  gm merge  c crop  ${UNDO_KEY} undo  gs consumers  ? help  q back`
+    return fitFooter(
+      goVerb(),
+      [verb("branch", "branch"), verb("merge", "merge"), verb("crop", "crop"), verb("undo", "undo"), verb("consumers", "consumers")],
+      `${verb("help", "help")}  ${backVerb()} back`,
+    )
   }
 
   const showsTree = () => panel() === "tree" || panel() === "help"
@@ -1788,7 +1862,7 @@ export function TreeRoute(props: TreeRouteProps) {
             return `${on ? "[x]" : "[ ]"}${prot.length ? "!" : " "}`
           }
           const prefix = () => `${isSel() ? "›" : "│"} ${mark()}`
-          const segs = () => segmentsOf(rowLine(row, rowWidth(), row.id === view().currentRowId), search().trim(), thoughtOf(row))
+          const segs = () => segmentsOf(rowLine(row, rowWidth(), row.id === view().currentRowId, isSel() ? selectedHint() : ""), search().trim(), thoughtOf(row))
           return (
             <Show
               when={segs().length > 1}

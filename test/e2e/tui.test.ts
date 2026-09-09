@@ -293,9 +293,11 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
     }
   }, 300_000)
 
-  test("za folds one turn, zm folds them all, zr opens them again", async () => {
+  test("the fold verbs fire, l opens a fold, and the cursor row names the key", async () => {
     // the fold keys are two-stroke sequences, which nothing else in the keymap was until now:
-    // this test exists to prove they really fire against the real TUI
+    // this test exists to prove they really fire against the real TUI — and, since the pane
+    // and the row hint both build their text from the live keymap, that the hint arrives on
+    // the cursor's row and nowhere else
     const toolMock = await startMock({ tool: true })
     const proj = await createProject({ mockPort: toolMock.port })
     await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
@@ -309,9 +311,10 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
           ["Context tree", 0.5, "\r"],
           ["Context tree ·", 2.5, "gg"],
           ["Context tree ·", 3.5, "za"],
-          ["Context tree ·", 5, "zr"],
-          ["Context tree ·", 6.5, "zm"],
-          ["Context tree ·", 8, "q"],
+          ["Context tree ·", 5, "zm"],
+          ["Context tree ·", 6.5, "l"],
+          ["Context tree ·", 8, "zr"],
+          ["Context tree ·", 9.5, "q"],
           ["Ask anything|mock reply", 1, "\x03"],
           ["", 1, "\x03"],
         ],
@@ -329,19 +332,32 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
         return hit.screen
       }
       const STEP = "⚙ [bash"
-      // the tree opens with every turn of this two-turn session in detail (the last 3 stay open)
-      expect(before(5)).toContain(STEP)
-      expect(before(5)).not.toContain("▸ ")
-      // za on the first turn: its two steps leave their rows and are reported on the turn
-      expect(before(6)).toContain("● user: run the tool   ▸ 2 steps")
-      expect(before(6)).not.toContain(STEP)
-      // zr opens every fold, the hand-folded one included
-      expect(before(7)).toContain(STEP)
-      expect(before(7)).not.toContain("▸ ")
-      // zm folds them all: no step row left on screen, every turn carrying its digest
-      expect(before(8)).not.toContain(STEP)
-      expect(before(8)).toContain("● user: run the tool   ▸ 2 steps")
-      expect(before(8)).toContain("● user: second   ▸ 1 step")
+      const FOLDED_FIRST = "● user: run the tool   ▸ 2 steps"
+      // The tree opens on the default posture: the turn you are in is open, everything above
+      // it is scrollback, folded. Only the first turn ran tools here, so it is the only row
+      // with a fold at all — the second turn owns nothing and never grows a ▸.
+      expect(before(4)).toContain(FOLDED_FIRST)
+      expect(before(4)).not.toContain(STEP)
+      expect(before(4)).toContain("● user: second ")
+      // gg puts the cursor on that folded turn, and the row says what it affords in the key
+      // that actually does it — on that row only, so a search over row text never sees it
+      expect(before(5)).toContain("za open")
+      expect(before(5).match(/za open/g)?.length ?? 0).toBe(1)
+      // za opens it; the hint on the same row flips to the other direction
+      expect(before(6)).toContain(STEP)
+      expect(before(6)).not.toContain(FOLDED_FIRST)
+      expect(before(6)).toContain("za fold")
+      // zm folds them all again, hand-opened turns included
+      expect(before(7)).not.toContain(STEP)
+      expect(before(7)).toContain(FOLDED_FIRST)
+      expect(before(7)).toContain("za open")
+      // `l` is vim's foldopen=hor: a horizontal move opens the fold under the cursor. This
+      // key did nothing at all on a turn row before, which is why it was free to mean this.
+      expect(before(8)).toContain(STEP)
+      expect(before(8)).not.toContain(FOLDED_FIRST)
+      // zr opens every fold there is, so nothing is left standing in for hidden rows
+      expect(before(9)).toContain(STEP)
+      expect(before(9)).not.toContain("▸ ")
     } finally {
       await toolMock.stop()
       await proj.cleanup()

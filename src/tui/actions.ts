@@ -16,6 +16,7 @@ import { contextSizeOf, formatK, type MinimalMessage } from "../core/tokens.js"
 import { DECISION_SYSTEM, branchTranscriptText, transcriptText, buildDecisionDraftPrompt, decisionMessageText, decisionRecord, decisionTemplate, openSiblings, templatePlaceholders } from "../core/decision.js"
 import { editInExternalEditor, hasEditor } from "./editor.js"
 import { debug } from "../shared/debug.js"
+import { keyLabel } from "../core/help.js"
 import { draftDetail, type ProgressState } from "../core/progress.js"
 import { fetchTranscript } from "./transcripts.js"
 
@@ -35,6 +36,9 @@ export type ActionContext = {
    *  paints it as a spinner with an elapsed counter and clears it on `undefined`. A caller
    *  without one gets one toast per stage instead (`progressReporter`). */
   progress?: (state: Omit<ProgressState, "startedAt"> | undefined) => void
+  /** The user's `keybinds`, so a notice that names a key names the one they actually have.
+   *  Absent means the defaults, which is what a caller with no route open has anyway. */
+  keybinds?: Record<string, string[]>
 }
 
 export type SummaryChoice = { kind: "none" } | { kind: "summarize"; customInstructions?: string }
@@ -534,14 +538,13 @@ export type MergeMode = "squash" | "squash-no-llm" | "discard" | "tournament"
 /** The promise every merge confirmation repeats — the reason a merge is safe to try. */
 export const MERGE_TRUST = "Your transcript is never rewritten; the record is appended to the trunk as a normal message."
 
-/** The tree route's undo key (`x` stays as an alias); every hint we print names this one. */
-export const UNDO_KEY = "u"
-
 /** What the $EDITOR gate opens with: the draft is a proposal, saving is the confirmation. */
 export const MERGE_GATE_NOTICE = `Edit the ◆ decision record, then save to confirm (empty file or a non-zero exit aborts the merge).\n${MERGE_TRUST}`
 
-/** The discard gate's message: the same promise, plus the way back. */
-export const DISCARD_NOTICE = `${MERGE_TRUST}\nThe branch is only marked rejected — ${UNDO_KEY} undoes it.`
+/** The discard gate's message: the same promise, plus the way back — named with the undo key
+ *  this user actually has, not a literal (see `core/help.ts#keyLabel`). */
+export const discardNotice = (ctx: ActionContext): string =>
+  `${MERGE_TRUST}\nThe branch is only marked rejected — ${keyLabel("undo", ctx.keybinds)} undoes it.`
 
 /** Where the merge lands, as the picker should name it. `label` is `TRUNK_LABEL` for the tree
  *  root, else the parent branch's name; the figures come from the parent's own transcript. */
@@ -695,7 +698,7 @@ export async function mergeBranch(ctx: ActionContext, input: MergeInput): Promis
       // discard is the one mode that lands nothing, so it gets its own gate — and a cancelled
       // note prompt has to abort too, not fall through as "no note"
       report.done()
-      const ok = await confirmDialog(ctx, `Discard ⎇ ${name} (${plural(turns, "turn")})?`, DISCARD_NOTICE)
+      const ok = await confirmDialog(ctx, `Discard ⎇ ${name} (${plural(turns, "turn")})?`, discardNotice(ctx))
       if (!ok) {
         notify(ctx, { variant: "warning", message: `⎇ ${name} kept — nothing discarded` })
         return undefined

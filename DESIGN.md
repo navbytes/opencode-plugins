@@ -265,7 +265,8 @@ means there. Already true: `j k`, `ctrl+d`/`ctrl+u`, `ctrl+f`/`ctrl+b`, `gg`, `G
 (vim's paragraph motion, mapped onto turns — the unit the strip already rules), `[[ ]]`,
 `/ n N`, `y`, `u`. Turn folds take vim's fold vocabulary whole rather than inventing one:
 `za` toggle, `zo`/`zc` open/close, `zr`/`zm` open-all/close-all, `zj`/`zk` between folds
-(`h`/`l`/`Tab` stay as tree-explorer aliases). Two deliberate exceptions: `?` is help, not
+(`h`/`l`/`Tab` stay as tree-explorer aliases, and `l`/`→` also opens a folded turn, as
+vim's `foldopen=…,hor` does). Two deliberate exceptions: `?` is help, not
 reverse search (`/` with `N` covers that, and `?` is universal in TUIs), and `q`/`esc` is back.
 
 *The realignment* (shipped as its own change, since it moves keys people had in their fingers;
@@ -758,7 +759,12 @@ evidence.
 `zR`/`zM`, but OpenCode's binding parser does not match a shifted second stroke (verified
 against the real TUI in `test/e2e/tui.test.ts`), and with a single fold level vim's own
 `zr`/`zm` — one level less/more folding — mean exactly the same thing here. `h`/`l`/`Tab`
-stay branch folds.
+stay branch folds, with one vim-faithful addition (0.3.0-beta.2): **`l`/`→` opens a folded
+turn**, because vim's `foldopen` default includes `hor` — a horizontal move opens the fold
+under the cursor. Only opening. Nothing in vim closes a fold by moving, so `h`/`←` keep their
+branch meaning and `za`/`zc` stay the way to close one; and on a turn row `l` was a no-op
+before (at depth 0 there is no branch to expand, and deeper the branch is already shown),
+which is what left the key free to mean this.
 
 **Lane width (0.2.4).** The strip is `width() + 2 - LANE_CHROME`: the terminal, minus the
 12-column lane label and the mode legend, plus the two columns a row spends on its `│ ` prefix
@@ -776,7 +782,36 @@ Below 110 columns the inspector is hidden and `i` opens it full-screen; below 80
 minimap collapses to a single `Input` sparkline line. Row layout always keeps
 `glyph · preview · tokens`.
 
-### 7.7 What we deliberately do not copy from DSH
+**Chrome is dropped, not wrapped.** Everything that is not the row's own content yields
+when the terminal is too narrow for it, in this order: the cursor row's affordance hint
+disappears first (it needs its own width plus four columns of gap, or it is not drawn), then
+the footer drops verbs from the right until it fits — `? help` survives, being the route to
+everything it dropped. Nothing here ever wraps to a second line: a tree whose row count
+changes with the terminal width cannot be navigated by eye.
+
+### 7.7 The affordance hint (0.3.0-beta.2)
+
+The keymap is vim's, which is transparent if you know vim and opaque otherwise: nothing on
+screen said that the `▸` on a folded turn opens with `za`. The **selected row only** carries a
+right-aligned hint naming the one action it affords, in the key that is bound to it *now*
+(`core/help.ts#rowHint` over `keyLabel`, so a `keybinds` override changes the hint rather than
+making it lie): `za open` / `za fold` on a turn, `→ expand` / `⏎ switch` on a branch,
+`space crop` on a croppable result, `u restore` on a cropped one.
+
+One row and one action, deliberately:
+
+- **One row.** A hint on every row would be a second column of noise on the thing you are
+  skimming; and because it is cursor chrome, the live search (which matches over the same
+  rendered line) never matches it — `rowLine` takes the hint as an argument that the search
+  path does not pass.
+- **One action.** A row that lists four keys teaches none of them, so each row kind names its
+  single most likely next move: a turn folds or opens, a branch expands or (if it is not the
+  one you are on) switches, a tool result crops — or, if it is already cropped, restores.
+- **Nothing to say is nothing drawn.** A row with no affordance, a command the user has
+  unbound, crop mode and the `?` pane (both of which already own a key legend of their own)
+  all render no hint at all.
+
+### 7.8 What we deliberately do not copy from DSH
 
 DSH is a web GUI with unlimited space and mouse; its Payload/Schema tabs show full
 JSON. In the TUI, Payload is pretty-printed and truncated with `y` to copy the full
