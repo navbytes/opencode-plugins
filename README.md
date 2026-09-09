@@ -123,13 +123,17 @@ Every turn but the one you are in folds to a single row, so the outline reads as
 rather than a wall of tool calls:
 
 ```
-● T5 add a retry to the flaky test        ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠
+● ▸6 T5 add a retry to the flaky test  1✗ 2⚠                                ~12k
+● T6 now make it pass on CI                                                 ~310
 ```
+
+`▸6` between the `●` and the text is the fold: the row's own disclosure control, at the row's
+own left edge, saying it stands for six hidden rows. The token column already counts them.
 
 `za` folds or opens the turn you are on, `l` opens the folded one under the cursor (vim opens
 a fold on a horizontal move), `zm` folds them all, `zr` opens them all — vim's own fold keys.
 And you do not have to know them: the row the cursor is on names the key for the one thing it
-affords, and only that row. Nothing is lost either — the digest counts what is inside, the
+affords, and only that row. Nothing is lost either — the marker counts what is inside, the
 timeline still shows every event (a folded turn lights the whole span it stands for), and crop
 mode opens everything while you pick targets.
 

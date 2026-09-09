@@ -17,7 +17,7 @@ import type { JournalStore } from "../shared/store.js"
 import { applyCrop, branchLabel, BRANCH_DIALOG, clip as clipTo, COPY_HINT, copyText, createNamedBranch, executeJump, executeUndo, jumpDialogOptions, jumpDialogTitle, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, MERGE_TRUST, setLabel, type ActionContext, type MergeMode, type SummaryChoice } from "./actions.js"
 import { decisionSummary, exportDecisions, renderDecision } from "../core/decision.js"
 import { formatProgress, SPINNER_MS, type ProgressState } from "../core/progress.js"
-import { applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy } from "../core/fold.js"
+import { applyFolds, foldFlags, foldMark, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy } from "../core/fold.js"
 import { DEFAULT_KEYS, footerLine, helpLines, keyLabel, keyLabels, rowHint, type RowAffordance } from "../core/help.js"
 import { laneLabel, laneSuffix, layoutEventStrip, overviewTrack, stripIndexFor, windowFor, LANE_CHROME, type LaneMode, type StripCell } from "../core/lanes.js"
 import { bar, consumers, type Consumer, type ConsumerEntry } from "../core/consumers.js"
@@ -114,9 +114,12 @@ function rowLine(row: Row, width: number, here: boolean, hint = ""): string {
     const flags =
       row.kind === "step"
         ? `${row.label ? ` [${row.label}]` : ""}${row.isCropped ? " ✂" : ""}${row.warn ? " ⚠" : ""}${row.isError ? " ✗" : ""}`
-        : `${row.label ? ` [${row.label}]` : ""}${isFolded(row) ? `   ${foldDigest(row.fold, formatK)}` : ""}`
+        : `${row.label ? ` [${row.label}]` : ""}${isFolded(row) ? foldFlags(row.fold) : ""}`
     const dur = row.kind === "step" && row.durationMs !== undefined ? ` ${(row.durationMs / 1000).toFixed(row.durationMs < 10_000 ? 1 : 0)}s` : ""
-    body = `${row.gutter}${glyphOf(row)} ${textOf(row)}${flags}${dur}${thoughtOf(row)}${marker}`
+    // the fold marker sits between the glyph and the text: it is this row's disclosure
+    // control, so it belongs at the row's left edge and not at the end of a clipped preview
+    const fold = isFolded(row) ? `${foldMark(row.fold)} ` : ""
+    body = `${row.gutter}${glyphOf(row)} ${fold}${textOf(row)}${flags}${dur}${thoughtOf(row)}${marker}`
   }
   return fitRow(body, tokens, width, hint)
 }

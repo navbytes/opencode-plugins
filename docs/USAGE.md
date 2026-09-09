@@ -197,14 +197,18 @@ A turn where the model ran six tools is seven rows, and the one you skim for is 
 turn. So every turn but **the one you are working in** opens folded, carrying what it holds:
 
 ```
-│ ● T5 add a retry to the flaky test       ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠
-│ ● T6 now make it pass on CI
+│ ● ▸6 T5 add a retry to the flaky test  1✗ 2⚠                            ~12k
+│ ● T6 now make it pass on CI                                             ~310
 │ ⚙ [bash $ bun test src/foo.test.ts] → 3 failed …                        ~5.1k
 │ ○ assistant: the failures share a timing assumption                       ~90
 ```
 
-Nothing escapes a fold — the digest is the whole story: how many steps, their tokens, and how
-many were errors (`✗`), fat (`⚠` ≥10k) or already cropped (`✂`).
+**`▸6` is the fold**, sitting between the `●` and the text: this row's disclosure control, at
+the row's own left edge, standing for six hidden rows. The right-hand column already includes
+their tokens — a folded turn's figure is the whole turn — so the marker does not repeat it.
+What it does carry is what you would want to know before opening it: `1✗ 2⚠ 1✂` after the
+text, in the same place and the same glyphs a step row flags its own errors (`✗`), fat results
+(`⚠` ≥10k) and crops (`✂`). Nothing escapes a fold.
 
 | key | what it folds |
 |---|---|

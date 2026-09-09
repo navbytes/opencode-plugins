@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **The fold marker moved to the row's left edge, and stopped repeating the token column.**
+  A folded turn now reads `● ▸6 T5 add a retry to the flaky test  1✗ 2⚠`, where `▸6` sits
+  between the `●` and the text: the row's own disclosure control, where an outline puts one.
+
+  It used to trail the preview as `▸ 6 steps · ~12k · 1 ✗ · 2 ⚠`, which failed twice over on
+  a real screen. The caret was nowhere near the `●` it belonged to, so on a tree of folded
+  turns nothing marked a collapsed row until you had read to the end of its usually-clipped
+  preview. And `~12k` was the row's own token column *again* — `applyFolds` rolls the hidden
+  steps' tokens into the turn, so the two figures are the same number by construction; two
+  numbers of the same magnitude a few columns apart, always equal, read as one number that
+  had gone wrong. The tokens are now printed once, in the column that already exists, and the
+  flags (`1✗ 2⚠ 1✂`) sit at the end of the text where a step row already draws its own.
+
 ## 0.3.0-beta.2 — 2026-09-09
 
 - **The row under the cursor names the key that acts on it.** The keymap is vim's, which is

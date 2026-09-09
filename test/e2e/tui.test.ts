@@ -332,12 +332,16 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
         return hit.screen
       }
       const STEP = "⚙ [bash"
-      const FOLDED_FIRST = "● user: run the tool   ▸ 2 steps"
+      const FOLDED_FIRST = "● ▸2 user: run the tool"
       // The tree opens on the default posture: the turn you are in is open, everything above
       // it is scrollback, folded. Only the first turn ran tools here, so it is the only row
       // with a fold at all — the second turn owns nothing and never grows a ▸.
       expect(before(4)).toContain(FOLDED_FIRST)
       expect(before(4)).not.toContain(STEP)
+      // the marker is the row's left edge, between the ● and the preview — not a digest
+      // trailing a clipped preview, and never a second copy of the token column
+      expect(before(4)).toMatch(/● ▸2 user: run the tool/)
+      expect(before(4)).not.toMatch(/▸\s*\d+ steps/)
       expect(before(4)).toContain("● user: second ")
       // gg puts the cursor on that folded turn, and the row says what it affords in the key
       // that actually does it — on that row only, so a search over row text never sees it
@@ -355,9 +359,10 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
       // key did nothing at all on a turn row before, which is why it was free to mean this.
       expect(before(8)).toContain(STEP)
       expect(before(8)).not.toContain(FOLDED_FIRST)
-      // zr opens every fold there is, so nothing is left standing in for hidden rows
+      // zr opens every fold there is, so nothing is left standing in for hidden rows.
+      // `▸\d` rather than a bare caret: a collapsed *branch* row draws ▸ too.
       expect(before(9)).toContain(STEP)
-      expect(before(9)).not.toContain("▸ ")
+      expect(before(9)).not.toMatch(/▸\d/)
     } finally {
       await toolMock.stop()
       await proj.cleanup()

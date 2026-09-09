@@ -731,8 +731,17 @@ filter change (as in Pi) and is otherwise remembered per session in `api.kv`.
 
 **Turn folds (`core/fold.ts`).** A turn whose model ran six tools costs seven rows and one of
 them is the skeleton you were skimming, so a turn collapses into its `●` row carrying what it
-swallowed: `● T7 add a retry to the flaky test   ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠`. Nothing escapes
-a fold — the digest is the whole story of what is inside it.
+swallowed: `● ▸6 T7 add a retry to the flaky test  1✗ 2⚠`. Nothing escapes a fold.
+
+*Where the marker goes (0.3.0-beta.2).* `▸6` sits **between the glyph and the text**, because
+that is where an outline puts a disclosure control — and the first shipped version put a
+digest after the preview instead, which failed twice over. The caret was nowhere near the `●`
+it belonged to, so on a screen of folded turns nothing marked a collapsed row until you had
+read to the end of its (usually clipped) preview; and the digest carried a token figure that
+was the row's own token column *again*, since `applyFolds` rolls the hidden steps' tokens into
+the turn. Two numbers of the same magnitude a few columns apart, always equal, read as one
+number that had gone wrong. So: the caret and the count on the left (`foldMark`), the flags at
+the end of the text where a step row already draws its own (`foldFlags`), and the tokens once.
 
 *Posture.* `auto` (the default) keeps **the current turn of the path you are on** open, so the
 far scrollback compresses while the end you are working at stays in detail; `zm` folds every

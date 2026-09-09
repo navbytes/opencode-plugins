@@ -167,7 +167,7 @@ export function helpLines(version: string, overrides?: Record<string, string[]>)
     ),
     "Legend",
     "  ● user · ○ assistant · ⚙ tool step · ◆ decision · ≣ summary · ⎇ branch (a real OpenCode session)",
-    "  │ ├ ╰ draw the topology · ▾ open ▸ folded · ← here is the session you are in",
+    "  │ ├ ╰ draw the topology · ▾ open · ▸6 folded, standing for 6 rows · ← the session you are in",
     "  dim rows are not sent to the model; ── not in this branch's context ── is where your path forked",
     "  right column is tokens; ~ estimated · ⚠ ≥10k · ✂ cropped · ✗ tool error",
     "  status-line right: the prompt really sent at the cursor · history, not re-costed after a crop",
