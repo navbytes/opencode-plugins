@@ -4,10 +4,22 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import path from "node:path"
+import { tmpdir } from "node:os"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { createProject, installPlugins, REPO_ROOT, runTui, runTuiScreens, startMock, type StartedMock } from "./harness.js"
 
 const e2e = process.env["CTREE_E2E"] === "1"
+
+/** `CTREE_DUMP=<path>` writes the pyte-rendered screens for eyeballing a failure. A value that
+ *  is not a path (`CTREE_DUMP=1`, the obvious thing to type) lands in the temp dir rather than
+ *  creating a file called `1` in the repo root — which is exactly how one got committed. */
+async function dumpScreens(screens: { label: string; screen: string }[]): Promise<void> {
+  const want = process.env["CTREE_DUMP"]
+  if (!want) return
+  const file = want.includes("/") ? want : path.join(tmpdir(), "ctree-e2e-screens.txt")
+  await Bun.write(file, screens.map((x) => `=== ${x.label}\n${x.screen}`).join("\n"))
+  console.log(`screens → ${file}`)
+}
 
 describe.skipIf(!e2e)("tui e2e: built plugin", () => {
   let mock: StartedMock
@@ -308,7 +320,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
         rows: 34,
         exitWhenDone: true,
       })
-      if (process.env["CTREE_DUMP"]) await Bun.write(process.env["CTREE_DUMP"]!, screens.map((x) => `=== ${x.label}\n${x.screen}`).join("\n"))
+      await dumpScreens(screens)
       // screens are captured *before* each key, so key N's screen is the state key N-1 left:
       // assert the state itself rather than the notice, which has a lifetime of its own
       const before = (key: number) => {
@@ -332,6 +344,66 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
       expect(before(8)).toContain("● user: second   ▸ 1 step")
     } finally {
       await toolMock.stop()
+      await proj.cleanup()
+    }
+  }, 300_000)
+
+  test("a summary that takes seconds shows a live progress line while it runs", async () => {
+    // The mock answers instantly, which is why no earlier test watched the tree *during* a
+    // draft at all. Holding the summary request back pins the two things a user reports when
+    // they say "no feedback": that the line is up straight away (0.3s in, not whenever
+    // something else repaints), and that it is still moving while the model thinks.
+    const m = await startMock({ tool: false, slowSummaryMs: 20000 })
+    const proj = await createProject({ mockPort: m.port })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    try {
+      const { screens } = await runTuiScreens({
+        projectDir: proj.dir,
+        keys: [
+          ["Ask anything", 1, "first question\r"],
+          ["mock reply", 8, "second question\r"],
+          ["mock reply", 16, "/tree"],
+          ["Context tree", 0.5, "\r"],
+          ["Context tree ·", 2, "gg"],
+          ["Context tree ·", 3, "\r"],
+          // ↓ once = "Summarize everything below this point"
+          ["Fork & prefill this turn", 1.5, "\x1b[B"],
+          ["Summarize everything below", 1, "\r"],
+          // four screens half a second apart while the summary is still in flight: close
+          // enough that only a *live* line changes between them (the spinner turns every
+          // 120ms), which is the thing OpenCode's on-demand renderer does not do by itself
+          ["Summarize everything below", 0.3, ""],
+          ["Summarize everything below", 0.5, ""],
+          ["Summarize everything below", 0.5, ""],
+          ["Summarize everything below", 0.5, ""],
+          ["mock reply|Ask anything", 20, "\x03"],
+          ["", 1, "\x03"],
+        ],
+        timeoutSec: 240,
+        cols: 130,
+        rows: 34,
+        exitWhenDone: true,
+      })
+      await dumpScreens(screens)
+      // the first sample is 0.3s after the choice: the line has to be up *immediately*, not
+      // whenever something else happens to repaint the screen
+      const inFlight = screens.filter((x) => x.label.includes("conditional key 8") || x.label.includes("conditional key 9") || x.label.includes("conditional key 10") || x.label.includes("conditional key 11"))
+      expect(inFlight.length).toBe(4)
+      const during = inFlight.filter((x) => x.screen.includes("summarizing"))
+      if (during.length < 4) throw new Error(`the progress line was missing from ${4 - during.length} of the 4 in-flight samples: ${inFlight.map((x) => (x.screen.includes("summarizing") ? "line" : "NOTHING")).join(" ")}`)
+      expect(during.every((x) => x.screen.includes("esc cancels"))).toBe(true)
+
+      // It is *live*: the spinner has turned between these half-second samples. Without a
+      // frame request the line is drawn once and then sits frozen until something unrelated
+      // repaints — which is exactly what "no feedback" looked like.
+      const frames = during.map((x) => /([⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]) summarizing/.exec(x.screen)?.[1]).filter((v): v is string => v !== undefined)
+      if (process.env["CTREE_DUMP"]) console.log(`spinner frames across ${during.length} samples: ${frames.join(" ")}`)
+      expect(frames.length).toBe(during.length)
+      // two of four is enough to prove it moved: at 8 frames a second, samples half a second
+      // apart alias against the 10-frame cycle, so "all four differ" would be flaky
+      expect(new Set(frames).size).toBeGreaterThan(1)
+    } finally {
+      await m.stop()
       await proj.cleanup()
     }
   }, 300_000)

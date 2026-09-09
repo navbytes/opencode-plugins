@@ -1,6 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.3.0-beta.2 — 2026-09-09
+
+- **The status line now asks OpenCode for a frame when it changes.** OpenCode's renderer draws
+  on demand, and nothing here ever called `requestRender()`: a signal changed from inside an
+  `await` — every progress update, and every notice raised by a slow action — reached the
+  render buffer and then waited there for something else to trigger a repaint. While a draft
+  runs the route also holds the renderer's own refcounted `requestLive()`, the same thing an
+  animation asks for, and drops it when the draft ends.
+
+  This is the one difference between 0.3.0-beta.1 and the branch summary reading as "no
+  feedback at all": beta.1 carries the progress line but never asks to be drawn. On the two
+  OpenCode versions the e2e suite can drive (1.18.26 and 1.18.29) the line was already being
+  painted promptly without it, so the fix is unconfirmed against a report rather than proven —
+  but nothing should depend on another component's render loop to be visible.
+
+- **The e2e suite can now watch a draft while it runs.** `startMock({ slowSummaryMs })` holds
+  back the branch-summary request only (the setup turns stay fast), and a new test samples the
+  tree 0.3s after you choose *Summarize* and three more times half a second apart: the line
+  must be up on all four, and the spinner must have turned between them. Every earlier test
+  used a mock that answered instantly, so nothing had ever looked at the screen mid-draft.
+
+- `CTREE_OPENCODE_VERSION` picks the OpenCode the e2e suite installs and drives (default
+  1.18.26), so a report against a newer release can be reproduced without editing the harness.
+
+## 0.3.0-beta.1 — 2026-09-08
 
 ### Breaking: the keymap is now vim-aligned
 
