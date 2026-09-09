@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-09-09
 
 - **The context gauge was illegible on a light theme.** `ctx ▓░░░░ 84.7k/1M · low · 99% cached`
   was painted as one band-coloured run — `ctx`, the bar, and the numbers all in `success`
