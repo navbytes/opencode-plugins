@@ -3,10 +3,18 @@ name: Publish to npm
 # Trusted publishing (OIDC): no npm token is stored anywhere. npm accepts the publish
 # because this repo + this workflow file are registered as the package's trusted publisher
 # (`npm trust github opencode-context-tree --file publish.yml --repo navbytes/opencode-tree`).
+# Registering a new package: `npm publish` its v0.x by hand once with a real token, then
+# `npm trust github <name> --file publish.yml --repo navbytes/opencode-tree`.
 on:
   release:
     types: [published]
-  workflow_dispatch:     # dispatched on the new tag by release.yml
+  workflow_dispatch:     # dispatched on the new tag by release.yml, or run directly
+    inputs:
+      package:
+        description: "Package to publish (only used when run directly, not via release)"
+        type: choice
+        default: context-tree
+        options: [context-tree]
 
 permissions:
   id-token: write   # mint the OIDC token npm verifies
@@ -35,16 +43,36 @@ jobs:
       - run: bun run typecheck
       - run: bun test
 
-      # The tag is the version: stamp it into package.json in this checkout only. A prerelease
-      # (0.3.0-beta.1) goes under the `beta` dist-tag so `latest` keeps pointing at the last stable.
-      - name: Version from the release tag
-        id: version
+      # The tag is <package>-v<version>: derive both, stamp the version into that package's
+      # package.json in this checkout only. A prerelease (0.3.0-beta.1) goes under the `beta`
+      # dist-tag so `latest` keeps pointing at the last stable. Old-style bare `v*` tags (the
+      # transition case) have no `-v` in the middle and resolve to context-tree.
+      - name: Determine package and version
+        id: meta
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          echo "$tag" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' || { echo "ref '$GITHUB_REF_NAME' is not a version tag" >&2; exit 1; }
-          npm version "$tag" --no-git-tag-version --allow-same-version
-          case "$tag" in *-*) echo "dist_tag=beta" ;; *) echo "dist_tag=latest" ;; esac >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          case "$GITHUB_REF_NAME" in
+            *-v*)
+              package="${GITHUB_REF_NAME%-v*}"
+              version="${GITHUB_REF_NAME#*-v}"
+              ;;
+            v*)
+              package="context-tree"
+              version="${GITHUB_REF_NAME#v}"
+              ;;
+            *)
+              package="${{ inputs.package }}"
+              version=""
+              ;;
+          esac
+          package="${package:-context-tree}"
+          echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' || { echo "ref '$GITHUB_REF_NAME' is not a version tag (package=$package, version=$version)" >&2; exit 1; }
+          case "$version" in *-*) dist_tag=beta ;; *) dist_tag=latest ;; esac
+          cd "packages/$package" && npm version "$version" --no-git-tag-version --allow-same-version
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
 
       # OIDC trusted publishing needs the package to already exist on npm: the very first
       # version of a new package is published once by hand, every later one lands here.
-      - run: npm publish --provenance --access public --tag "${{ steps.version.outputs.dist_tag }}"
+      - run: cd "packages/${{ steps.meta.outputs.package }}" && npm publish --provenance --access public --tag "${{ steps.meta.outputs.dist_tag }}"

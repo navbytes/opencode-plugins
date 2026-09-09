@@ -25,8 +25,8 @@ options only matter to the half that implements them (`storage` both; `jumpSumma
 `hardCrop`, `keybinds` TUI-only). Plain `{ "plugin": ["opencode-context-tree"] }` in both
 files is fine and uses the defaults.
 
-From a checkout: `bun install && bun run build`, then list `/abs/path/dist/server.js` and
-`/abs/path/dist/tui.js` instead of the package name.
+From a checkout: `bun install && bun run build`, then list `/abs/path/packages/context-tree/dist/server.js` and
+`/abs/path/packages/context-tree/dist/tui.js` instead of the package name.
 
 Options: `storage` `"local"` (default, `.opencode/context-tree/` in the worktree, gitignored)
 or `"global"` (OpenCode's state dir); `jumpSummary` `"ask"` (default, Pi behaviour) or `"never"`;

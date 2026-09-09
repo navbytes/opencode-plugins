@@ -13,9 +13,12 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk"
 
-export const REPO_ROOT = path.resolve(import.meta.dir, "../..")
+export const REPO_ROOT = path.resolve(import.meta.dir, "../../../..")
 export const HARNESS_DIR = path.join(REPO_ROOT, "harness")
 export const TEMPLATE_PROJECT_DIR = path.join(HARNESS_DIR, "project")
+// Where this package's own scripts/build.ts and dist/ live — distinct from REPO_ROOT
+// now that the package is nested under packages/context-tree.
+export const PACKAGE_DIR = path.resolve(import.meta.dir, "../..")
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))

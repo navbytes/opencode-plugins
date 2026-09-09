@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import path from "node:path"
 import { tmpdir } from "node:os"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
-import { createProject, installPlugins, REPO_ROOT, runTui, runTuiScreens, startMock, type StartedMock } from "./harness.js"
+import { createProject, installPlugins, PACKAGE_DIR, REPO_ROOT, runTui, runTuiScreens, startMock, type StartedMock } from "./harness.js"
 
 const e2e = process.env["CTREE_E2E"] === "1"
 
@@ -26,14 +26,14 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
   let project: Awaited<ReturnType<typeof createProject>>
 
   beforeAll(async () => {
-    const build = Bun.spawnSync({ cmd: ["bun", "run", "scripts/build.ts"], cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"] })
+    const build = Bun.spawnSync({ cmd: ["bun", "run", "scripts/build.ts"], cwd: PACKAGE_DIR, stdio: ["ignore", "pipe", "pipe"] })
     if (build.exitCode !== 0) throw new Error(`build failed: ${build.stderr.toString()}`)
     mock = await startMock({ tool: false })
     project = await createProject({ mockPort: mock.port })
     await installPlugins({
       projectDir: project.dir,
-      server: [path.join(REPO_ROOT, "dist", "server.js")],
-      tui: [path.join(REPO_ROOT, "dist", "tui.js")],
+      server: [path.join(PACKAGE_DIR, "dist", "server.js")],
+      tui: [path.join(PACKAGE_DIR, "dist", "tui.js")],
     })
   })
 
@@ -45,7 +45,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
   test("crop in the tree hides a tool result from the model; undo restores it", async () => {
     const toolMock = await startMock({ tool: true })
     const proj = await createProject({ mockPort: toolMock.port })
-    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")], tui: [path.join(PACKAGE_DIR, "dist", "tui.js")] })
     try {
       await runTui({
         projectDir: proj.dir,
@@ -96,7 +96,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
   test("/branch, /merge (squash via $EDITOR) lands a ◆ record in the trunk; undo re-opens", async () => {
     const m = await startMock({ tool: false })
     const proj = await createProject({ mockPort: m.port })
-    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")], tui: [path.join(PACKAGE_DIR, "dist", "tui.js")] })
     try {
       await runTui({
         projectDir: proj.dir,
@@ -141,7 +141,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
   test("⏎ on an earlier turn offers Pi's three fork choices; summarize lands a ≣ summary in the fork", async () => {
     const m = await startMock({ tool: false })
     const proj = await createProject({ mockPort: m.port })
-    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")], tui: [path.join(PACKAGE_DIR, "dist", "tui.js")] })
     try {
       const text = await runTui({
         projectDir: proj.dir,
@@ -196,7 +196,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
   test("esc in the custom-prompt editor loops back to Pi's choices instead of cancelling the whole jump", async () => {
     const m = await startMock({ tool: false })
     const proj = await createProject({ mockPort: m.port })
-    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")], tui: [path.join(PACKAGE_DIR, "dist", "tui.js")] })
     try {
       const { screens } = await runTuiScreens({
         projectDir: proj.dir,
@@ -246,7 +246,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
   test("the server captures the real system prompt; consumers shows it as a bucket", async () => {
     const m = await startMock({ tool: false })
     const proj = await createProject({ mockPort: m.port })
-    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")], tui: [path.join(PACKAGE_DIR, "dist", "tui.js")] })
     try {
       const log = path.join(proj.dir, "ctree-debug.log")
       const { screens } = await runTuiScreens({
@@ -300,7 +300,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
     // the cursor's row and nowhere else
     const toolMock = await startMock({ tool: true })
     const proj = await createProject({ mockPort: toolMock.port })
-    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")], tui: [path.join(PACKAGE_DIR, "dist", "tui.js")] })
     try {
       const { screens } = await runTuiScreens({
         projectDir: proj.dir,
@@ -376,7 +376,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
     // something else repaints), and that it is still moving while the model thinks.
     const m = await startMock({ tool: false, slowSummaryMs: 20000 })
     const proj = await createProject({ mockPort: m.port })
-    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")], tui: [path.join(PACKAGE_DIR, "dist", "tui.js")] })
     try {
       const { screens } = await runTuiScreens({
         projectDir: proj.dir,
@@ -432,7 +432,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
   test("the ? pane teaches the verbs, and scrolls to the rest", async () => {
     const m = await startMock({ tool: false })
     const proj = await createProject({ mockPort: m.port })
-    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")], tui: [path.join(PACKAGE_DIR, "dist", "tui.js")] })
     try {
       const { screens } = await runTuiScreens({
         projectDir: proj.dir,
@@ -474,7 +474,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
     // `g`, so this proves the sequence tree branches rather than `gg` shadowing them
     const m = await startMock({ tool: false })
     const proj = await createProject({ mockPort: m.port })
-    await installPlugins({ projectDir: proj.dir, server: [path.join(REPO_ROOT, "dist", "server.js")], tui: [path.join(REPO_ROOT, "dist", "tui.js")] })
+    await installPlugins({ projectDir: proj.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")], tui: [path.join(PACKAGE_DIR, "dist", "tui.js")] })
     try {
       const { screens } = await runTuiScreens({
         projectDir: proj.dir,

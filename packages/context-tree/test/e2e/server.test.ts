@@ -15,7 +15,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { cp, mkdir } from "node:fs/promises"
 import path from "node:path"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
-import { createProject, startMock, startServer, TEMPLATE_PROJECT_DIR, type StartedMock, type StartedServer, REPO_ROOT, installPlugins } from "./harness.js"
+import { createProject, startMock, startServer, TEMPLATE_PROJECT_DIR, type StartedMock, type StartedServer, PACKAGE_DIR, installPlugins } from "./harness.js"
 
 const e2e = process.env.CTREE_E2E === "1"
 
@@ -231,13 +231,13 @@ describe.skipIf(!e2e)("server e2e: built plugin headless /ctree commands", () =>
   let dir: string
 
   beforeAll(async () => {
-    const build = Bun.spawnSync({ cmd: ["bun", "run", "scripts/build.ts"], cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"] })
+    const build = Bun.spawnSync({ cmd: ["bun", "run", "scripts/build.ts"], cwd: PACKAGE_DIR, stdio: ["ignore", "pipe", "pipe"] })
     if (build.exitCode !== 0) throw new Error(`build failed: ${build.stderr.toString()}`)
     mock = await startMock({ tool: true })
     const project = await createProject({ mockPort: mock.port })
     cleanupProject = project.cleanup
     dir = project.dir
-    await installPlugins({ projectDir: project.dir, server: [path.join(REPO_ROOT, "dist", "server.js")] })
+    await installPlugins({ projectDir: project.dir, server: [path.join(PACKAGE_DIR, "dist", "server.js")] })
     server = await startServer({ projectDir: project.dir })
   })
 
@@ -374,13 +374,13 @@ describe.skipIf(!e2e)('server e2e: storage "global" option', () => {
   let dir: string
 
   beforeAll(async () => {
-    const build = Bun.spawnSync({ cmd: ["bun", "run", "scripts/build.ts"], cwd: REPO_ROOT, stdio: ["ignore", "pipe", "pipe"] })
+    const build = Bun.spawnSync({ cmd: ["bun", "run", "scripts/build.ts"], cwd: PACKAGE_DIR, stdio: ["ignore", "pipe", "pipe"] })
     if (build.exitCode !== 0) throw new Error(`build failed: ${build.stderr.toString()}`)
     mock = await startMock({ tool: false })
     const project = await createProject({ mockPort: mock.port })
     cleanupProject = project.cleanup
     dir = project.dir
-    await installPlugins({ projectDir: project.dir, server: [[path.join(REPO_ROOT, "dist", "server.js"), { storage: "global" }]] })
+    await installPlugins({ projectDir: project.dir, server: [[path.join(PACKAGE_DIR, "dist", "server.js"), { storage: "global" }]] })
     server = await startServer({ projectDir: project.dir })
   })
 
