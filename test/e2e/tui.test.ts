@@ -4,10 +4,22 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import path from "node:path"
+import { tmpdir } from "node:os"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { createProject, installPlugins, REPO_ROOT, runTui, runTuiScreens, startMock, type StartedMock } from "./harness.js"
 
 const e2e = process.env["CTREE_E2E"] === "1"
+
+/** `CTREE_DUMP=<path>` writes the pyte-rendered screens for eyeballing a failure. A value that
+ *  is not a path (`CTREE_DUMP=1`, the obvious thing to type) lands in the temp dir rather than
+ *  creating a file called `1` in the repo root — which is exactly how one got committed. */
+async function dumpScreens(screens: { label: string; screen: string }[]): Promise<void> {
+  const want = process.env["CTREE_DUMP"]
+  if (!want) return
+  const file = want.includes("/") ? want : path.join(tmpdir(), "ctree-e2e-screens.txt")
+  await Bun.write(file, screens.map((x) => `=== ${x.label}\n${x.screen}`).join("\n"))
+  console.log(`screens → ${file}`)
+}
 
 describe.skipIf(!e2e)("tui e2e: built plugin", () => {
   let mock: StartedMock
@@ -308,7 +320,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
         rows: 34,
         exitWhenDone: true,
       })
-      if (process.env["CTREE_DUMP"]) await Bun.write(process.env["CTREE_DUMP"]!, screens.map((x) => `=== ${x.label}\n${x.screen}`).join("\n"))
+      await dumpScreens(screens)
       // screens are captured *before* each key, so key N's screen is the state key N-1 left:
       // assert the state itself rather than the notice, which has a lifetime of its own
       const before = (key: number) => {
@@ -372,7 +384,7 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
         rows: 34,
         exitWhenDone: true,
       })
-      if (process.env["CTREE_DUMP"]) await Bun.write(process.env["CTREE_DUMP"]!, screens.map((x) => `=== ${x.label}\n${x.screen}`).join("\n"))
+      await dumpScreens(screens)
       // the first sample is 0.3s after the choice: the line has to be up *immediately*, not
       // whenever something else happens to repaint the screen
       const inFlight = screens.filter((x) => x.label.includes("conditional key 8") || x.label.includes("conditional key 9") || x.label.includes("conditional key 10") || x.label.includes("conditional key 11"))
