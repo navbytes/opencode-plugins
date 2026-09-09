@@ -142,7 +142,7 @@ export const server: Plugin = async ({ worktree, client, directory }, options) =
     config: async (cfg) => {
       const c = cfg as { command?: Record<string, unknown> }
       if (c.command?.["ctree"]) return // a user-defined /ctree command wins
-      c.command = { ...(c.command ?? {}), ctree: { template: "$ARGUMENTS", description: "Context tree (headless): status | branch | merge --discard | crop | undo | decisions — no /tree? run: opencode plugin opencode-context-tree -g" } }
+      c.command = { ...(c.command ?? {}), ctree: { template: "$ARGUMENTS", description: "Context tree without the TUI — status (where am I, what does it cost) | branch | merge --discard | crop (stop sending fat tool results) | undo | decisions. No /tree? run: opencode plugin opencode-context-tree -g" } }
     },
 
     "command.execute.before": async (input, output) => {
