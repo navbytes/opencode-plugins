@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { DEFAULT_OPEN_TURNS, applyFolds, foldDigest, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy } from "../src/core/fold.js"
+import { DEFAULT_OPEN_TURNS, applyFolds, foldFlags, foldMark, isFolded, nextFoldIndex, ownerTurnIndex, policyFor, setManualFold, type FoldPolicy, type FoldSummary } from "../src/core/fold.js"
 import { buildTreeView, type Row } from "../src/core/tree.js"
 import { formatK } from "../src/core/tokens.js"
 import { buildFixture, OPEN, TRUNK } from "./fixtures/tree.js"
@@ -142,11 +142,43 @@ describe("nextFoldIndex", () => {
   })
 })
 
-describe("foldDigest", () => {
-  test("steps and tokens always; flags only when there are any", () => {
-    expect(foldDigest({ steps: 6, tokens: 12_000, estimated: false, errors: 0, warns: 0, cropped: 0, messageIDs: [] }, formatK)).toBe("▸ 6 steps · 12k")
-    expect(foldDigest({ steps: 1, tokens: 900, estimated: false, errors: 0, warns: 0, cropped: 0, messageIDs: [] }, formatK)).toBe("▸ 1 step · 900")
-    expect(foldDigest({ steps: 6, tokens: 12_000, estimated: true, errors: 1, warns: 2, cropped: 1, messageIDs: [] }, formatK)).toBe("▸ 6 steps · ~12k · 1 ✗ · 2 ⚠ · 1 ✂")
+const summary = (over: Partial<FoldSummary> = {}): FoldSummary => ({ steps: 6, tokens: 12_000, estimated: false, errors: 0, warns: 0, cropped: 0, messageIDs: [], ...over })
+
+describe("foldMark", () => {
+  test("the caret and the count, and nothing else", () => {
+    expect(foldMark(summary())).toBe("▸6")
+    expect(foldMark(summary({ steps: 1 }))).toBe("▸1")
+    expect(foldMark(summary({ steps: 137 }))).toBe("▸137")
+  })
+
+  test("it never repeats the token column", () => {
+    // applyFolds rolls the hidden steps' tokens into the turn row, so the fold's tokens and
+    // the row's own figure are the same number: printing both read as one number gone wrong
+    const mark = foldMark(summary({ tokens: 23_500, estimated: true }))
+    expect(mark).not.toContain("k")
+    expect(mark).not.toContain("~")
+    expect(mark).not.toContain(formatK(23_500))
+  })
+
+  test("it is short enough to sit inside the row's left edge", () => {
+    for (const steps of [1, 9, 99, 999]) expect([...foldMark(summary({ steps }))].length).toBeLessThanOrEqual(5)
+  })
+})
+
+describe("foldFlags", () => {
+  test("nothing to flag draws nothing at all — most rows", () => {
+    expect(foldFlags(summary())).toBe("")
+  })
+
+  test("only the flags that fired, in a step row's own order", () => {
+    expect(foldFlags(summary({ errors: 1 }))).toBe(" 1✗")
+    expect(foldFlags(summary({ warns: 2 }))).toBe(" 2⚠")
+    expect(foldFlags(summary({ cropped: 1 }))).toBe(" 1✂")
+    expect(foldFlags(summary({ errors: 1, warns: 2, cropped: 3 }))).toBe(" 3✂ 2⚠ 1✗")
+  })
+
+  test("it leads with a space, so it joins the text without one of its own", () => {
+    expect(foldFlags(summary({ errors: 1 })).startsWith(" ")).toBe(true)
   })
 })
 

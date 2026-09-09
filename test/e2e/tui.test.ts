@@ -332,12 +332,16 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
         return hit.screen
       }
       const STEP = "⚙ [bash"
-      const FOLDED_FIRST = "● user: run the tool   ▸ 2 steps"
+      const FOLDED_FIRST = "● ▸2 user: run the tool"
       // The tree opens on the default posture: the turn you are in is open, everything above
       // it is scrollback, folded. Only the first turn ran tools here, so it is the only row
       // with a fold at all — the second turn owns nothing and never grows a ▸.
       expect(before(4)).toContain(FOLDED_FIRST)
       expect(before(4)).not.toContain(STEP)
+      // the marker is the row's left edge, between the ● and the preview — not a digest
+      // trailing a clipped preview, and never a second copy of the token column
+      expect(before(4)).toMatch(/● ▸2 user: run the tool/)
+      expect(before(4)).not.toMatch(/▸\s*\d+ steps/)
       expect(before(4)).toContain("● user: second ")
       // gg puts the cursor on that folded turn, and the row says what it affords in the key
       // that actually does it — on that row only, so a search over row text never sees it
@@ -355,9 +359,10 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
       // key did nothing at all on a turn row before, which is why it was free to mean this.
       expect(before(8)).toContain(STEP)
       expect(before(8)).not.toContain(FOLDED_FIRST)
-      // zr opens every fold there is, so nothing is left standing in for hidden rows
+      // zr opens every fold there is, so nothing is left standing in for hidden rows.
+      // `▸\d` rather than a bare caret: a collapsed *branch* row draws ▸ too.
       expect(before(9)).toContain(STEP)
-      expect(before(9)).not.toContain("▸ ")
+      expect(before(9)).not.toMatch(/▸\d/)
     } finally {
       await toolMock.stop()
       await proj.cleanup()
@@ -451,10 +456,13 @@ describe.skipIf(!e2e)("tui e2e: built plugin", () => {
       const seen = (needle: string) => screens.some((x) => x.screen.includes(needle))
       // the pane opens on what the tool is and what each verb is for
       if (!seen("nothing here rewrites your transcript")) throw new Error(`the ? pane never opened. screens: ${screens.map((x) => x.label).join(" | ")}`)
-      expect(seen("gb branch — try something risky")).toBe(true)
+      // the Act table: a key field, a name field, a purpose — aligned at render time
+      expect(seen("gb  branch   a real OpenCode session")).toBe(true)
       // a 30-row terminal cannot hold it, so it says so and PgDn reaches the rest
       expect(seen("PgUp/PgDn scroll")).toBe(true)
-      if (!seen("gs consumers — what is actually filling")) throw new Error("PgDn never reached the Views section of the ? pane")
+      if (!seen("gs  consumers  what is actually filling")) throw new Error("PgDn never reached the Views section of the ? pane")
+      // the footer names the section you scrolled into, since the headings scroll off
+      expect(screens.some((x) => /\d+–\d+ of \d+ · (Act|Views|Legend|Move) · /.test(x.screen))).toBe(true)
     } finally {
       await m.stop()
       await proj.cleanup()

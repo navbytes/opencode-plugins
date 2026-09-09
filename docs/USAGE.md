@@ -197,14 +197,18 @@ A turn where the model ran six tools is seven rows, and the one you skim for is 
 turn. So every turn but **the one you are working in** opens folded, carrying what it holds:
 
 ```
-│ ● T5 add a retry to the flaky test       ▸ 6 steps · ~12k · 1 ✗ · 2 ⚠
-│ ● T6 now make it pass on CI
+│ ● ▸6 T5 add a retry to the flaky test  1✗ 2⚠                            ~12k
+│ ● T6 now make it pass on CI                                             ~310
 │ ⚙ [bash $ bun test src/foo.test.ts] → 3 failed …                        ~5.1k
 │ ○ assistant: the failures share a timing assumption                       ~90
 ```
 
-Nothing escapes a fold — the digest is the whole story: how many steps, their tokens, and how
-many were errors (`✗`), fat (`⚠` ≥10k) or already cropped (`✂`).
+**`▸6` is the fold**, sitting between the `●` and the text: this row's disclosure control, at
+the row's own left edge, standing for six hidden rows. The right-hand column already includes
+their tokens — a folded turn's figure is the whole turn — so the marker does not repeat it.
+What it does carry is what you would want to know before opening it: `1✗ 2⚠ 1✂` after the
+text, in the same place and the same glyphs a step row flags its own errors (`✗`), fat results
+(`⚠` ≥10k) and crops (`✂`). Nothing escapes a fold.
 
 | key | what it folds |
 |---|---|
@@ -256,7 +260,7 @@ Three things are deliberate:
 | `gf` | filter picker (default · no-tools · tools-only · user-only · labeled · all) |
 | `/` `n` `N` | live search: typing re-filters the rows, `⏎` keeps the filter, `esc` clears; `n` `N` next / previous match |
 | `y` | copy the selected text — the terminal's clipboard when it allows it, else `.opencode/context-tree/last-copy.txt` |
-| `?` | help pane under the tree: how to read the screen + every key (`?` or `esc` closes) |
+| `?` | help pane under the tree, so the rows it explains stay on screen: how to read them, and what every key is *for*. Keys are the bright, bold thing on it — you can scan for one rather than read. `Act` and `Views` are a key column and a name column, so you can look up either `gm` or "merge"; `Move` and `Legend` are packed behind a dim label. It is laid out for your terminal's width, and it scrolls with `PgUp`/`PgDn` with the footer naming the section (`12–29 of 34 · Act · …`). `?` or `esc` closes |
 | `q` `esc` | back (esc leaves crop mode / a panel / a search first) |
 
 The footer follows the panel and the row under the cursor — on the tree `⏎ fork & prefill

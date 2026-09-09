@@ -6,6 +6,7 @@
 import type { TuiPluginApi, TuiPlugin } from "@opencode-ai/plugin/tui"
 import { Show, createEffect, createMemo, createSignal, on } from "solid-js"
 import { bandFor, cacheShare, contextSizeOf, formatK, type MinimalMessage, type MinimalPart } from "../core/tokens.js"
+import { BAND_TOKEN } from "../core/gauge.js"
 import { JournalStore, type StorageMode } from "../shared/store.js"
 import { debug } from "../shared/debug.js"
 import { BRANCH_DIALOG, MERGE_TRUST, branchLabel, bumpJournal, clip, createNamedBranch, journalRevision, mergeBranch, mergeDialogOptions, mergeDialogTitle, mergePickerFigures, setLabel, type MergeMode } from "./actions.js"
@@ -16,9 +17,8 @@ import { parseForkTitle } from "../core/adopt.js"
 import { adoptNativeForks, retryAdopt } from "../shared/adopt.js"
 import { sdkTimeout } from "../shared/sdk.js"
 import { fetchTranscript, modelContextLimit } from "./transcripts.js"
-import { ContextGauge } from "./gauge.js"
+import { ContextGauge, Span } from "./gauge.js"
 
-const BAND_COLOR = { low: "success", healthy: "success", filling: "warning", red: "error" } as const
 
 type Options = { storage: StorageMode; jumpSummary: "ask" | "never"; hardCrop: boolean; keybinds: Record<string, string[]>; open: string[] }
 
@@ -323,7 +323,11 @@ const tui: TuiPlugin = async (api, rawOptions) => {
               <b>Context tree</b>
             </text>
             <Show when={branch()} fallback={<text fg={t.text}>{`trunk${siblings() ? ` · ${siblings()} branch${siblings() === 1 ? "" : "es"}` : ""}`}</text>}>
-              <text fg={t.success}>{`⎇ ${branchLabel(api, props.session_id, branch()!.name, CARD_COLUMNS - 2)}`}</text>
+              {/* the glyph carries the colour, the name is read — see core/gauge.ts */}
+              <text>
+                <Span fg={t.success}>⎇ </Span>
+                <Span fg={t.text}>{branchLabel(api, props.session_id, branch()!.name, CARD_COLUMNS - 2)}</Span>
+              </text>
               <text fg={t.textMuted}>{status()}</text>
             </Show>
             <ContextGauge theme={t} size={size()} limit={limit()} showCachedSuffix={false} />
@@ -331,7 +335,10 @@ const tui: TuiPlugin = async (api, rawOptions) => {
               <text fg={t.textMuted}>{`${formatK(size().cached!)} cached of ${formatK(size().prompt!)} (${cacheShare(size())}%)`}</text>
             </Show>
             <Show when={crops().length}>
-              <text fg={t.warning}>{`✂ ${crops().length} crop${crops().length === 1 ? "" : "s"} · ~${formatK(hidden())} hidden`}</text>
+              <text>
+                <Span fg={t.warning}>✂ </Span>
+                <Span fg={t.text}>{`${crops().length} crop${crops().length === 1 ? "" : "s"} · ~${formatK(hidden())} hidden`}</Span>
+              </text>
             </Show>
             <text fg={t.textMuted}>/tree · ctrl+q</text>
           </box>
@@ -389,7 +396,7 @@ const tui: TuiPlugin = async (api, rawOptions) => {
             if (delta > 0 && (!biggest || delta > biggest.delta)) biggest = { key, delta }
           }
           const rise = prevTokens > 0 ? (now - prevTokens) / prevTokens : 0
-          if (now !== prevTokens) setTrend(rise >= 0.1 && biggest ? ` ▲ +${Math.round(rise * 100)}% (${biggest.key})` : "")
+          if (now !== prevTokens) setTrend(rise >= 0.1 && biggest ? ` +${Math.round(rise * 100)}% (${biggest.key})` : "")
           prevTokens = now
           prevParts = new Map([...parts].map(([id, v]) => [id, v.len]))
         })
@@ -409,10 +416,18 @@ const tui: TuiPlugin = async (api, rawOptions) => {
           // the same gauge the tree header shows, so both surfaces read identically
           <box flexDirection="row">
             <Show when={branch()}>
-              <text fg={t[BAND_COLOR[band()]]}>{`⎇ ${branchLabel(api, props.session_id, branch()!.name, 24)} · `}</text>
+              {/* the branch's *name* is text to read, so it takes the theme's text colour —
+                  a band colour here was both illegible on a light theme and a category error,
+                  since which branch you are on has nothing to do with the context band */}
+              <text fg={t.accent}>⎇ </text>
+              <text fg={t.text}>{`${branchLabel(api, props.session_id, branch()!.name, 24)} · `}</text>
             </Show>
             <ContextGauge theme={t} size={size()} limit={limit()} />
-            <text fg={t[BAND_COLOR[band()]]}>{trend()}</text>
+            {/* the arrow carries the band, the figure beside it is read */}
+            <Show when={trend()}>
+              <text fg={t[BAND_TOKEN[band()]]}> ▲</text>
+              <text fg={t.text}>{trend()}</text>
+            </Show>
           </box>
         )
       },

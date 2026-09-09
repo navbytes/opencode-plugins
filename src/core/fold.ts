@@ -173,16 +173,35 @@ export function applyFolds(rows: readonly Row[], policy: FoldPolicy): Row[] {
   return out
 }
 
-/** `▸ 6 steps · ~12k · 1 ✗ · 2 ⚠` — what the fold is standing in for, in the row's own
- *  vocabulary (`⚠` ≥10k, `✗` tool error, `✂` cropped, as the legend already reads them).
- *  "steps", not `⚙`: a turn's hidden rows are tool calls *and* assistant text, and claiming
- *  six tool calls when two of them were replies would be a small lie on every folded row. */
-export function foldDigest(fold: FoldSummary, formatTokens: (n: number) => string): string {
-  const parts = [`${fold.steps} step${fold.steps === 1 ? "" : "s"}`, `${fold.estimated ? "~" : ""}${formatTokens(fold.tokens)}`]
-  if (fold.errors > 0) parts.push(`${fold.errors} ✗`)
-  if (fold.warns > 0) parts.push(`${fold.warns} ⚠`)
-  if (fold.cropped > 0) parts.push(`${fold.cropped} ✂`)
-  return `▸ ${parts.join(" · ")}`
+/**
+ * `▸38` — the collapsed marker and how many rows it stands for, drawn between the turn's `●`
+ * glyph and its text so it reads as part of the row's left edge, where an outline's
+ * disclosure control belongs.
+ *
+ * It used to be a digest trailing the text (`▸ 38 steps · ~23.5k · 1 ✗`), which had two
+ * problems the tree showed plainly: the caret was nowhere near the `●` it belonged to, so
+ * nothing marked a collapsed row until you read to the end of its preview; and the token
+ * figure was the row's own token column *again*, since `applyFolds` rolls the hidden steps'
+ * tokens into the turn. Two numbers of the same size a few columns apart, always equal, read
+ * as one number that had gone wrong.
+ *
+ * No unit word: a bare count next to a caret is unambiguous, and the six columns "steps"
+ * costs are the ones the preview wanted.
+ */
+export function foldMark(fold: FoldSummary): string {
+  return `▸${fold.steps}`
+}
+
+/** ` 1✂ 2⚠ 1✗` — what a fold is hiding that you would want to know before opening it, in the
+ *  legend's own glyphs (`✂` cropped, `⚠` ≥10k, `✗` tool error) and in a step row's own order
+ *  and position: at the end of the text, exactly where a step draws its own flags. Empty when
+ *  there is nothing to flag, which is most rows. */
+export function foldFlags(fold: FoldSummary): string {
+  const parts: string[] = []
+  if (fold.cropped > 0) parts.push(`${fold.cropped}✂`)
+  if (fold.warns > 0) parts.push(`${fold.warns}⚠`)
+  if (fold.errors > 0) parts.push(`${fold.errors}✗`)
+  return parts.length ? ` ${parts.join(" ")}` : ""
 }
 
 /** Toggle one turn in the manual map, returning a new Map. `folded` states it outright

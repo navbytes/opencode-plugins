@@ -1,5 +1,90 @@
 # Changelog
 
+## Unreleased
+
+- **The context gauge was illegible on a light theme.** `ctx ▓░░░░ 84.7k/1M · low · 99% cached`
+  was painted as one band-coloured run — `ctx`, the bar, and the numbers all in `success`
+  green — in both the tree header and the prompt line. That reads on a dark theme by luck: a
+  theme guarantees `text` and `textMuted` are readable on its own background, and guarantees
+  nothing of the kind about `success` / `warning` / `error`, which it picks to be
+  *distinguishable from each other*.
+
+  The rule now is **the bar carries the band, readable text never does**, and it lives in
+  `core/gauge.ts#gaugeRoles` as a table rather than inline in the JSX, so `test/gauge.test.ts`
+  can hold it. `ctx` is muted, the numbers and band word take the theme's own text colour, and
+  the bar splits muted-cached / band-fresh / subtle-empty.
+
+  Three neighbours had the same defect and are fixed the same way — the glyph carries the
+  colour, the label beside it is read: the prompt line's `⎇ <branch> · ` (band-coloured, which
+  was also a category error — which branch you are on has nothing to do with the context
+  band), its `▲ +24% (bash)` trend, and the sidebar card's `⎇ <branch>` and `✂ 2 crops · ~14k
+  hidden`. A second test greps both components for a readable string inside a band-coloured
+  element, which is the shape that shipped.
+
+- **The `?` pane's colour was exactly inverted, and now is not.** Every indented line was
+  drawn in `textMuted` and every heading in the accent colour — so the headings, which name
+  no keys at all, were the brightest thing on the pane, and the keys, the only reason anyone
+  opens `?`, were the dimmest. A user looking for one key had no token-shaped thing to scan
+  for and had to read the pane at reading speed. **Keys are now the bright, bold thing**,
+  headings are accent, prose is muted, and the `│ ` gutter is always dim instead of taking
+  its line's colour.
+
+  This is why the pane is now built as `helpSegments()` — typed runs (`key`, `name`, `label`,
+  `heading`, `glyph`, `strong`, `text`) the route colours individually — rather than as flat
+  strings a route can only colour a line at a time. `helpLines()` remains as the joined-string
+  API the drift tests assert against.
+
+- **`Act` and `Views` became the table they already were.** Every row in them was already
+  `<key> <name> — <purpose>` in a consistent order; the `" — "` is now two columns aligned at
+  render time, so you can enter from either side — scan the keys down column 3 if you think
+  `gm`, or the names if you think "merge". Column widths are measured per *section*, so one
+  `f12` rebound in `Act` cannot shift `Legend` sideways, and a key wider than 8 columns takes
+  its own row ragged rather than pushing every purpose in its section right.
+
+  `Move` deliberately keeps its packed clauses — tabulating twenty motion clauses would cost
+  twenty rows to make vim's own keys, the ones this audience already has, the most prominent.
+  It gets a dim label column (`rows` / `jumps` / `folds` / `search`) instead, as does `Legend`
+  (`rows` / `tree` / `cost` / `status` / `⎇` / `lanes`); those labels are static strings, so
+  no rebind can break their alignment.
+
+- **Nine of the pane's lines were clipping at 100 columns with the width test green.** A help
+  row is `│ ` inside a `padding={1}` box, so its budget is `cols - 4` — which is what every
+  other line on the screen uses — but the test asserted `≤ 112` against the raw string. One
+  line clipped even at 112. The pane is now laid out *for the terminal it is on*: clauses drop
+  from the right and prose clips with `…`, never wrapping (§7.6), and the same 34 rows survive
+  down to a 44-column terminal. The test asserts against the row budget at four widths.
+
+- The `?` footer names the section you are in — `12–29 of 34 · Act · PgUp/PgDn scroll · q/esc
+  back`. The pane is a three-page scroll on a short terminal and its headings scroll off, so
+  page 2 was rows of verbs under no heading at all. Zero extra rows.
+
+- The legend draws colours instead of naming them: `█ open · █ squashed · …` in the branch
+  colours themselves, and the lane swatches in the lane colours. Spelling "green" in muted
+  grey asked the reader to take a monochrome word's word for it, and cost six columns where
+  showing it costs one — which is what let the pane's two longest lines fit.
+
+- The pane's glyphs are drawn in the tree's own colours (`⚠` warning, `✗` error, `◆ ≣ ✂`
+  accent), `nothing here rewrites your transcript` is bold as the safety claim it is, and the
+  `*model*` markdown asterisks became a bold run. Net: 34 rows before, 34 after.
+
+- `route.tsx` writes out `TextAttributes.BOLD`/`.DIM` as constants rather than importing them:
+  adding `@opentui/core` to the TUI bundle's runtime imports made the host fail to load the
+  route at all. `test/help.test.ts` pins both constants against the real enum and asserts the
+  built bundle imports only `@opentui/solid`.
+
+- **The fold marker moved to the row's left edge, and stopped repeating the token column.**
+  A folded turn now reads `● ▸6 T5 add a retry to the flaky test  1✗ 2⚠`, where `▸6` sits
+  between the `●` and the text: the row's own disclosure control, where an outline puts one.
+
+  It used to trail the preview as `▸ 6 steps · ~12k · 1 ✗ · 2 ⚠`, which failed twice over on
+  a real screen. The caret was nowhere near the `●` it belonged to, so on a tree of folded
+  turns nothing marked a collapsed row until you had read to the end of its usually-clipped
+  preview. And `~12k` was the row's own token column *again* — `applyFolds` rolls the hidden
+  steps' tokens into the turn, so the two figures are the same number by construction; two
+  numbers of the same magnitude a few columns apart, always equal, read as one number that
+  had gone wrong. The tokens are now printed once, in the column that already exists, and the
+  flags (`1✗ 2⚠ 1✂`) sit at the end of the text where a step row already draws its own.
+
 ## 0.3.0-beta.2 — 2026-09-09
 
 - **The row under the cursor names the key that acts on it.** The keymap is vim's, which is
