@@ -500,6 +500,25 @@ auto-compaction is the *lossy* event the user wants to pre-empt with `/crop` or
 active crops, decisions on path, `[/tree]`.
 
 
+**Which run takes which colour (0.3.0-beta.3, `core/gauge.ts#gaugeRoles`).** Through
+0.3.0-beta.2 the whole gauge was one band-coloured run — `ctx`, the bar, and
+`84.7k/1M · low` all in `success` green — which is legible on a dark theme by luck and was
+reported illegible on a light one. A theme guarantees `text` and `textMuted` are readable on
+its own background; it guarantees nothing of the kind about `success` / `warning` / `error`,
+which it picks to be *distinguishable from each other*. So the rule is: **the bar carries the
+band and readable text never does.** `ctx` is `textMuted`, the numbers and the band word are
+`text`, the bar's cached cells are `textMuted`, its fresh cells the band colour, its empty
+cells `borderSubtle`, and `· 95% cached` is `textMuted`. A filled bar survives a lower
+contrast ratio than glyph strokes do, and its colour is the signal rather than a decoration
+on text that says the same thing anyway.
+
+The same error was next to the gauge in three other places, all fixed the same way — the
+glyph carries the colour, the label beside it is read: the prompt slot's `⎇ <branch> · `
+(band-coloured, which was also a category error — which branch you are on has nothing to do
+with the context band), its `▲ +24% (bash)` trend, and the sidebar card's `⎇ <branch>` and
+`✂ 2 crops · ~14k hidden`. `test/gauge.test.ts` holds the table to the rule and greps both
+components for a readable string inside a band-coloured element.
+
 **The cursor's own prompt figure.** The tree's status line carries, right-aligned directly under
 the header gauge, what the provider was really sent at the row you are on:
 `T2 reply · prompt 43.7k · 30.1k cached`. It sums `input + cache.read + cache.write` exactly as

@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- **The context gauge was illegible on a light theme.** `ctx ▓░░░░ 84.7k/1M · low · 99% cached`
+  was painted as one band-coloured run — `ctx`, the bar, and the numbers all in `success`
+  green — in both the tree header and the prompt line. That reads on a dark theme by luck: a
+  theme guarantees `text` and `textMuted` are readable on its own background, and guarantees
+  nothing of the kind about `success` / `warning` / `error`, which it picks to be
+  *distinguishable from each other*.
+
+  The rule now is **the bar carries the band, readable text never does**, and it lives in
+  `core/gauge.ts#gaugeRoles` as a table rather than inline in the JSX, so `test/gauge.test.ts`
+  can hold it. `ctx` is muted, the numbers and band word take the theme's own text colour, and
+  the bar splits muted-cached / band-fresh / subtle-empty.
+
+  Three neighbours had the same defect and are fixed the same way — the glyph carries the
+  colour, the label beside it is read: the prompt line's `⎇ <branch> · ` (band-coloured, which
+  was also a category error — which branch you are on has nothing to do with the context
+  band), its `▲ +24% (bash)` trend, and the sidebar card's `⎇ <branch>` and `✂ 2 crops · ~14k
+  hidden`. A second test greps both components for a readable string inside a band-coloured
+  element, which is the shape that shipped.
+
 - **The `?` pane's colour was exactly inverted, and now is not.** Every indented line was
   drawn in `textMuted` and every heading in the accent colour — so the headings, which name
   no keys at all, were the brightest thing on the pane, and the keys, the only reason anyone
