@@ -8,8 +8,13 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      package:
+        description: "Package to release"
+        type: choice
+        default: context-tree
+        options: [context-tree]
       bump:
-        description: "Version bump relative to the latest v* tag"
+        description: "Version bump relative to the latest <package>-v* tag"
         type: choice
         default: patch
         options: [patch, minor, major]
@@ -26,7 +31,7 @@ permissions:
   contents: write   # push the tag, create the release
   actions: write    # dispatch publish.yml
 
-concurrency: release
+concurrency: release-${{ inputs.package }}
 
 jobs:
   release:
@@ -48,8 +53,16 @@ jobs:
         id: v
         run: |
           set -euo pipefail
-          latest="$(git tag --list 'v*' --sort=-v:refname | head -1)"
-          latest="${latest#v}"; latest="${latest:-0.0.0}"
+          package="${{ inputs.package }}"
+          prefix="${package}-v"
+          latest_tag="$(git tag --list "${prefix}*" --sort=-v:refname | head -1)"
+          latest="${latest_tag#$prefix}"
+          if [ -z "$latest" ] && [ "$package" = context-tree ]; then
+            # transition shim: context-tree's pre-monorepo history used bare v* tags
+            latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -1)"
+            latest="${latest_tag#v}"
+          fi
+          latest="${latest:-0.0.0}"
           explicit="${{ inputs.version }}"
           if [ -n "$explicit" ]; then
             next="${explicit#v}"
@@ -62,13 +75,16 @@ jobs:
             esac
           fi
           echo "$next" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' || { echo "not a semver version: $next" >&2; exit 1; }
-          git rev-parse -q --verify "refs/tags/v$next" >/dev/null && { echo "tag v$next already exists" >&2; exit 1; }
-          if ! grep -q "^## ${next}" CHANGELOG.md; then
-            echo "::warning::CHANGELOG.md has no '## $next' section — add one on main before or after the release"
+          git rev-parse -q --verify "refs/tags/${prefix}${next}" >/dev/null && { echo "tag ${prefix}${next} already exists" >&2; exit 1; }
+          if ! grep -q "^## ${next}" "packages/${package}/CHANGELOG.md"; then
+            echo "::warning::packages/${package}/CHANGELOG.md has no '## $next' section — add one on main before or after the release"
           fi
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"
-          echo "Latest tag v$latest → releasing v$next from $(git rev-parse --short HEAD)"
+          echo "Latest tag ${latest_tag:-none} → releasing ${prefix}${next} from $(git rev-parse --short HEAD)"
 
       - name: Tag, release, publish
         if: ${{ !inputs.dry_run }}
@@ -76,16 +92,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          package="${{ steps.v.outputs.package }}"
+          prefix="${{ steps.v.outputs.prefix }}"
           v="${{ steps.v.outputs.next }}"
+          tag="${prefix}${v}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$v" -m "v$v"
-          git push origin "v$v"
+          git tag -a "$tag" -m "$tag"
+          git push origin "$tag"
           prerelease=""; case "$v" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "v$v" --title "v$v" --generate-notes $prerelease
-          gh workflow run publish.yml --ref "v$v"
-          echo "Released v$v; publish workflow dispatched on the tag."
+          notes_args=()
+          latest_tag="${{ steps.v.outputs.latest_tag }}"
+          [ -n "$latest_tag" ] && notes_args=(--notes-start-tag "$latest_tag")
+          gh release create "$tag" --title "$tag" --generate-notes "${notes_args[@]}" $prerelease
+          gh workflow run publish.yml --ref "$tag" -f package="$package"
+          echo "Released $tag; publish workflow dispatched on the tag."
 
       - name: Dry run
         if: ${{ inputs.dry_run }}
-        run: echo "Dry run — would tag v${{ steps.v.outputs.next }} (latest v${{ steps.v.outputs.latest }}), create the release, and dispatch publish.yml."
+        run: echo "Dry run — would tag ${{ steps.v.outputs.prefix }}${{ steps.v.outputs.next }} (latest ${{ steps.v.outputs.latest_tag || 'none' }}), create the release, and dispatch publish.yml."

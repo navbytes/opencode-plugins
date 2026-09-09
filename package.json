@@ -1,46 +1,11 @@
 {
-  "name": "opencode-context-tree",
-  "version": "0.0.0-dev",
-  "private": false,
-  "type": "module",
-  "description": "Pi-style context tree for OpenCode: branch, merge (human-confirmed decision records), crop, undo, plus a DeepSeek-Harness-style trajectory view",
-  "license": "MIT",
-  "exports": {
-    ".": {
-      "types": "./src/server/index.ts",
-      "import": "./dist/server.js"
-    },
-    "./server": {
-      "types": "./src/server/index.ts",
-      "import": "./dist/server.js"
-    },
-    "./tui": {
-      "types": "./src/tui/index.tsx",
-      "import": "./dist/tui.js"
-    }
-  },
-  "files": [
-    "dist",
-    "src",
-    "README.md",
-    "LICENSE",
-    "docs/USAGE.md",
-    "CHANGELOG.md"
-  ],
+  "name": "opencode-tree-monorepo",
+  "private": true,
+  "workspaces": ["packages/*"],
   "scripts": {
-    "build": "bun run scripts/build.ts",
-    "prepack": "bun run build",
-    "typecheck": "bunx tsc --noEmit -p tsconfig.json",
-    "test": "bun test",
-    "test:e2e": "CTREE_E2E=1 bun test --timeout 120000 test/e2e"
-  },
-  "engines": {
-    "opencode": ">=1.18.0"
-  },
-  "dependencies": {
-    "@opencode-ai/plugin": "1.18.26",
-    "@opencode-ai/sdk": "1.18.26",
-    "zod": "^4.0.0"
+    "build": "for d in packages/*/; do (cd \"$d\" && bun run build) || exit 1; done",
+    "typecheck": "for d in packages/*/; do (cd \"$d\" && bun run typecheck) || exit 1; done",
+    "test": "bun test"
   },
   "devDependencies": {
     "@opentui/core": "^0.5.10",
@@ -49,45 +14,5 @@
     "@types/bun": "latest",
     "solid-js": "^1.9.12",
     "typescript": "^5.8.2"
-  },
-  "peerDependencies": {
-    "@opentui/core": ">=0.5.10",
-    "@opentui/keymap": ">=0.5.10",
-    "@opentui/solid": ">=0.5.10",
-    "solid-js": ">=1.9.12"
-  },
-  "peerDependenciesMeta": {
-    "@opentui/core": {
-      "optional": true
-    },
-    "@opentui/keymap": {
-      "optional": true
-    },
-    "@opentui/solid": {
-      "optional": true
-    },
-    "solid-js": {
-      "optional": true
-    }
-  },
-  "author": "Naveen (navbytes)",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/navbytes/opencode-tree.git"
-  },
-  "homepage": "https://github.com/navbytes/opencode-tree#readme",
-  "keywords": [
-    "opencode",
-    "opencode-plugin",
-    "context-tree",
-    "context-engineering",
-    "branch",
-    "merge",
-    "crop",
-    "trajectory",
-    "tui"
-  ],
-  "publishConfig": {
-    "access": "public"
   }
 }
