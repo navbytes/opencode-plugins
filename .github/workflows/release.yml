@@ -55,6 +55,11 @@ jobs:
           set -euo pipefail
           package="${{ inputs.package }}"
           prefix="${package}-v"
+          # Without this, git's default version-sort ranks "1.2.3-beta.1" ABOVE the
+          # final "1.2.3" it precedes (it has no notion of "-beta" as a prerelease
+          # marker unless told), so a stable release would look older than its own
+          # betas forever. This tells it "-beta" sorts before the bare tag.
+          git config versionsort.suffix -beta
           latest_tag="$(git tag --list "${prefix}*" --sort=-v:refname | head -1)"
           latest="${latest_tag#$prefix}"
           if [ -z "$latest" ] && [ "$package" = context-tree ]; then
@@ -67,7 +72,11 @@ jobs:
           if [ -n "$explicit" ]; then
             next="${explicit#v}"
           else
-            IFS=. read -r major minor patch <<< "$latest"
+            # Bump off the released base, ignoring any prerelease suffix on $latest
+            # (e.g. "1.2.3-beta.1" bumps like "1.2.3" — plain `IFS=. read` would put
+            # "2-beta" in $patch and crash on `$((patch+1))`).
+            base="${latest%%-*}"
+            IFS=. read -r major minor patch <<< "$base"
             case "${{ inputs.bump }}" in
               major) next="$((major+1)).0.0" ;;
               minor) next="$major.$((minor+1)).0" ;;
