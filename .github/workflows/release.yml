@@ -12,7 +12,7 @@ on:
         description: "Package to release"
         type: choice
         default: context-tree
-        options: [context-tree]
+        options: [context-tree, git-stats]
       bump:
         description: "Version bump relative to the latest <package>-v* tag"
         type: choice

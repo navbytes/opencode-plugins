@@ -41,6 +41,34 @@
         "solid-js",
       ],
     },
+    "packages/git-stats": {
+      "name": "opencode-git-stats",
+      "version": "0.0.0-dev",
+      "dependencies": {
+        "@opencode-ai/plugin": "1.18.26",
+        "@opencode-ai/sdk": "1.18.26",
+      },
+      "devDependencies": {
+        "@opentui/core": "^0.5.10",
+        "@opentui/keymap": "^0.5.10",
+        "@opentui/solid": "^0.5.10",
+        "@types/bun": "latest",
+        "solid-js": "^1.9.12",
+        "typescript": "^5.8.2",
+      },
+      "peerDependencies": {
+        "@opentui/core": ">=0.5.10",
+        "@opentui/keymap": ">=0.5.10",
+        "@opentui/solid": ">=0.5.10",
+        "solid-js": ">=1.9.12",
+      },
+      "optionalPeers": [
+        "@opentui/core",
+        "@opentui/keymap",
+        "@opentui/solid",
+        "solid-js",
+      ],
+    },
   },
   "packages": {
     "@ai-sdk/provider": ["@ai-sdk/provider@3.0.8", "", { "dependencies": { "json-schema": "^0.4.0" } }, "sha512-oGMAgGoQdBXbZqNG0Ze56CHjDZ1IDYOwGYxYjO5KLSlz5HiNQ9udIXsPZ61VWaHGZ5XW/jyjmr6t2xz2jGVwbQ=="],
@@ -262,6 +290,8 @@
     "node-releases": ["node-releases@2.0.55", "", {}, "sha512-mIrE/Cw9y+9Au6dS5vDKDhQza9YvG6w+ZrS6X+ZzA7yFW/soAeaups4Qzn1bL6g5FVy8WtP79+0j82oPIbqRjQ=="],
 
     "opencode-context-tree": ["opencode-context-tree@workspace:packages/context-tree"],
+
+    "opencode-git-stats": ["opencode-git-stats@workspace:packages/git-stats"],
 
     "p-limit": ["p-limit@2.3.0", "", { "dependencies": { "p-try": "^2.0.0" } }, "sha512-//88mFWSJx8lxCzwdAABTJL2MyWB12+eIY7MDL2SqLmAkeKU9qxRvWuSyTjm3FUmpBEMuFfckAIqEaVGUDxb6w=="],
 
