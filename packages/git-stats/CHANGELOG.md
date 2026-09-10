@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1 — unreleased
+## 0.1.1 — 2026-09-10
 
 - **Clicking a chip now opens the pull request.** It never did. The label was
   rendered as an OSC 8 hyperlink and the escape sequence really was in the output —
