@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.1.1 — 2026-09-10
+## 0.1.2 — 2026-09-10
+
+<!-- 0.1.1 was never released: `bump=patch` computed off the `git-stats-v0.1.1-beta.1`
+     tag, whose base 0.1.1 the release script treats as already spoken for, so the next
+     patch is 0.1.2. Cutting the release a beta anticipated needs an explicit
+     `-f version=`. -->
 
 - **Clicking a chip now opens the pull request.** It never did. The label was
   rendered as an OSC 8 hyperlink and the escape sequence really was in the output —
