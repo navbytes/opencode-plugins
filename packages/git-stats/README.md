@@ -117,8 +117,22 @@ have just installed it. Chips you have dismissed are never fetched at all.
 bun install
 bun run build      # -> dist/tui.js
 bun run typecheck
-bun test
+bun test           # unit tests, ~3s
+bun run test:e2e   # renders the card in a real TUI, ~4min
 ```
+
+`bun test` covers the pure functions. `test:e2e` is the one that would notice the
+card breaking: it boots the real OpenCode TUI in a pty with the built plugin, against
+a real git repo and a real `gh`, and asserts on the composed screen and the raw
+terminal bytes — the figures matching what `git` reports, the chip rendering as
+`#20 Merged` in GitHub's own purple (`48;2;130;80;223`), a scripted mouse click on
+the chip opening the pull request, a click on the `×` dismissing it and opening
+nothing, and a logged-out `gh` degrading to `#20 …` with the reason shown.
+
+It is opt-in (`GIT_STATS_E2E=1`) because it needs an authenticated `gh` and takes
+minutes; plain `bun test` skips it. Both halves of it have been checked by breaking
+the plugin on purpose — removing the click handler and changing the merged colour
+each make it fail.
 
 To try a local build, point `tui.json` at the built file:
 
