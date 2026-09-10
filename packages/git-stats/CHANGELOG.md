@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.1-beta.1 — 2026-09-10
+
+**Nothing in the plugin changed.** `git diff git-stats-v0.1.0 git-stats-v0.1.1-beta.1
+-- src dist` is empty; the only difference is the `repository.url` and `homepage`
+metadata following the repo's rename to `navbytes/opencode-plugins`.
+
+This version exists because the release path had never actually been run for this
+package, and the way to find out whether it works is to run it. It did not: the `npm`
+deployment environment only admitted tags matching `v*`, the scheme this repo used
+before it became a monorepo, so the publish job was rejected before its first step —
+with no failing step and no log to read. Fixed by allowing `*-v*` as well.
+
+Published under the `beta` dist-tag, so `latest` still resolves to 0.1.0. Deprecated
+on npm; install `opencode-git-stats@latest` instead.
+
 ## 0.1.0 — 2026-09-10
 
 First release.
