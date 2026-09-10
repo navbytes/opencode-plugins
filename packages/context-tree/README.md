@@ -8,7 +8,7 @@ A Pi-style context tree with git-style controls (`/branch`, `/merge`, `/crop`, `
 and a DeepSeek-Harness-style trajectory view, in one screen, inside your terminal.
 
 [![npm](https://img.shields.io/npm/v/opencode-context-tree?color=cb3837&logo=npm)](https://www.npmjs.com/package/opencode-context-tree)
-[![CI](https://github.com/navbytes/opencode-tree/actions/workflows/ci.yml/badge.svg)](https://github.com/navbytes/opencode-tree/actions/workflows/ci.yml)
+[![CI](https://github.com/navbytes/opencode-plugins/actions/workflows/ci.yml/badge.svg)](https://github.com/navbytes/opencode-plugins/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![OpenCode](https://img.shields.io/badge/OpenCode-%E2%89%A5%201.18-black)](https://opencode.ai)
 
@@ -351,8 +351,8 @@ To run your checkout instead of the published package, list the built files by a
 path rather than the package name:
 
 ```jsonc
-// opencode.json  →  "plugin": ["/abs/path/opencode-tree/packages/context-tree/dist/server.js"]
-// tui.json       →  "plugin": ["/abs/path/opencode-tree/packages/context-tree/dist/tui.js"]
+// opencode.json  →  "plugin": ["/abs/path/opencode-plugins/packages/context-tree/dist/server.js"]
+// tui.json       →  "plugin": ["/abs/path/opencode-plugins/packages/context-tree/dist/tui.js"]
 ```
 
 [DESIGN.md](./DESIGN.md) is the long version: the research behind the design (Pi,

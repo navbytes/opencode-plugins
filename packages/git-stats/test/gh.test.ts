@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fetchPrState } from "../src/core/gh.js"
 
-const REF = { host: "github.com", owner: "navbytes", repo: "opencode-tree", number: 20, url: "https://github.com/navbytes/opencode-tree/pull/20" }
+const REF = { host: "github.com", owner: "navbytes", repo: "opencode-plugins", number: 20, url: "https://github.com/navbytes/opencode-plugins/pull/20" }
 const PATH = process.env.PATH
 
 afterEach(() => {

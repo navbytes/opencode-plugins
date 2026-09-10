@@ -73,10 +73,10 @@
   "author": "Naveen (navbytes)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/navbytes/opencode-tree.git",
+    "url": "git+https://github.com/navbytes/opencode-plugins.git",
     "directory": "packages/context-tree"
   },
-  "homepage": "https://github.com/navbytes/opencode-tree#readme",
+  "homepage": "https://github.com/navbytes/opencode-plugins#readme",
   "keywords": [
     "opencode",
     "opencode-plugin",

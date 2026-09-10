@@ -1,5 +1,5 @@
 {
-  "name": "opencode-tree-monorepo",
+  "name": "opencode-plugins-monorepo",
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {

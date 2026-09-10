@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "opencode-tree-monorepo",
+      "name": "opencode-plugins-monorepo",
       "devDependencies": {
         "@opentui/core": "^0.5.10",
         "@opentui/keymap": "^0.5.10",

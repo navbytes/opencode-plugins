@@ -62,10 +62,10 @@
   "author": "Naveen (navbytes)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/navbytes/opencode-tree.git",
+    "url": "git+https://github.com/navbytes/opencode-plugins.git",
     "directory": "packages/git-stats"
   },
-  "homepage": "https://github.com/navbytes/opencode-tree/tree/main/packages/git-stats#readme",
+  "homepage": "https://github.com/navbytes/opencode-plugins/tree/main/packages/git-stats#readme",
   "keywords": [
     "opencode",
     "opencode-plugin",

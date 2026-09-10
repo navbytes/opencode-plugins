@@ -6,7 +6,7 @@
 pull request your [OpenCode](https://opencode.ai) session touched.**
 
 [![npm](https://img.shields.io/npm/v/opencode-git-stats?color=cb3837&logo=npm)](https://www.npmjs.com/package/opencode-git-stats)
-[![CI](https://github.com/navbytes/opencode-tree/actions/workflows/ci.yml/badge.svg)](https://github.com/navbytes/opencode-tree/actions/workflows/ci.yml)
+[![CI](https://github.com/navbytes/opencode-plugins/actions/workflows/ci.yml/badge.svg)](https://github.com/navbytes/opencode-plugins/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![OpenCode](https://img.shields.io/badge/OpenCode-%E2%89%A5%201.18-black)](https://opencode.ai)
 
