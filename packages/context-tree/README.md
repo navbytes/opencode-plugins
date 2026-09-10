@@ -364,6 +364,12 @@ what changed in each release.
 Issues and pull requests are welcome. Please run the typecheck and the unit tests before
 opening one.
 
+## The other plugin in this repo
+
+[`opencode-git-stats`](../git-stats/README.md) puts the working tree's diff figures and a
+GitHub-coloured chip per pull request your session touched in the same sidebar. The two
+are independent — install either, or both.
+
 ## License
 
 [MIT](./LICENSE) © Naveen (navbytes)
