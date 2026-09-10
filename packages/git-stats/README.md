@@ -1,7 +1,16 @@
+<div align="center">
+
 # opencode-git-stats
 
-An [OpenCode](https://opencode.ai) sidebar card: what the working tree currently
-looks like, and a GitHub-coloured chip for every pull request the session touched.
+**What the working tree looks like right now, and a GitHub-coloured chip for every
+pull request your [OpenCode](https://opencode.ai) session touched.**
+
+[![npm](https://img.shields.io/npm/v/opencode-git-stats?color=cb3837&logo=npm)](https://www.npmjs.com/package/opencode-git-stats)
+[![CI](https://github.com/navbytes/opencode-tree/actions/workflows/ci.yml/badge.svg)](https://github.com/navbytes/opencode-tree/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![OpenCode](https://img.shields.io/badge/OpenCode-%E2%89%A5%201.18-black)](https://opencode.ai)
+
+</div>
 
 ```
 Git Stats
@@ -34,7 +43,7 @@ This is a **TUI** plugin, so it goes in `tui.json` (not `opencode.json`):
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["opencode-git-stats@0.1.0"]
+  "plugin": ["opencode-git-stats@latest"]
 }
 ```
 
@@ -67,7 +76,7 @@ a real Enterprise host has to be named:
 
 ```json
 {
-  "plugin": [["opencode-git-stats@0.1.0", { "hosts": ["github.acme.com"] }]]
+  "plugin": [["opencode-git-stats@latest", { "hosts": ["github.acme.com"] }]]
 }
 ```
 
@@ -88,16 +97,22 @@ API:
 |---|---|
 | working-tree figures | `client.vcs.status()` |
 | branch name | `state.vcs.branch` |
-| PR sightings | `state.session.messages()` + `state.part()` (completed tool parts) |
+| PR sightings | `event.on("message.part.updated")`, plus a catch-up scan of `state.session.messages()` / `state.part()` |
 | refresh triggers | `event.on("session.diff")`, `event.on("session.idle")`, a 10 s tick |
 | dismissals | `kv` |
 | the card | a `sidebar_content` slot at order 450 |
 
 The one thing OpenCode cannot answer is whether a pull request is draft, open,
 closed or merged, so the plugin shells out to `gh pr view --json state,isDraft`.
-That is the only external call it makes; `gh` is spawned with an argv array, never
-a shell string. A merged PR is never re-checked, and a `gh` that is missing or
-logged out is reported once rather than retried every tick.
+That is the only external call it makes, and it is spawned with an argv array —
+never a shell string — for a host on the allow-list above.
+
+A merged pull request is terminal and never re-fetched. Open and draft ones age
+out after 90 seconds, closed ones after five minutes, and the end of every turn
+marks them all due again. A `gh` call that fails backs that chip off
+exponentially, up to about 16 minutes, so a missing or logged-out `gh` is not
+re-spawned on every tick; the backoff clears at the end of a turn, in case you
+have just installed it. Chips you have dismissed are never fetched at all.
 
 ## Development
 
