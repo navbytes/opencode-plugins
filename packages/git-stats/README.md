@@ -12,13 +12,7 @@ pull request your [OpenCode](https://opencode.ai) session touched.**
 
 </div>
 
-```
-Git Stats
-⎇ fix-release-prerelease-bump
-+123 -45 · 7 files
- #20 Merged  ×  #21 Draft  ×
-```
-
+![The Git Stats card in the OpenCode sidebar](docs/screenshots/sidebar-card.png)
 
 - **Working-tree figures** — total additions, deletions and changed files for the
   whole folder, not just the files this session edited. They come from OpenCode's
@@ -30,6 +24,8 @@ Git Stats
 - **Close a chip** — click the `×` beside it, or run `/prs` to hide one, hide them
   all, or bring the hidden ones back. Dismissals are per session and survive a
   restart.
+
+  ![The /prs picker, listing each chip with its pull request title](docs/screenshots/prs-dialog.png)
 - **Open the PR** — click the chip's label and the pull request opens in your
   browser. (The label is also an OSC 8 hyperlink, but OpenCode keeps mouse tracking
   on, so the terminal hands the click to the plugin rather than following the link
@@ -129,6 +125,12 @@ To try a local build, point `tui.json` at the built file:
 ```json
 { "plugin": ["/absolute/path/to/packages/git-stats/dist/tui.js"] }
 ```
+
+## The other plugin in this repo
+
+[`opencode-context-tree`](../context-tree/README.md) turns the session itself into a tree
+you can branch, merge, crop and undo, with a trajectory view. The two are independent —
+install either, or both.
 
 ## License
 
