@@ -14,7 +14,7 @@ on:
         description: "Package to publish (only used when run directly, not via release)"
         type: choice
         default: context-tree
-        options: [context-tree]
+        options: [context-tree, git-stats]
 
 permissions:
   id-token: write   # mint the OIDC token npm verifies

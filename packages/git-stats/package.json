@@ -1,0 +1,82 @@
+{
+  "name": "opencode-git-stats",
+  "version": "0.0.0-dev",
+  "private": false,
+  "type": "module",
+  "description": "OpenCode sidebar: working-tree diff stats and GitHub-coloured chips for the pull requests your session touched",
+  "license": "MIT",
+  "exports": {
+    "./tui": {
+      "types": "./src/tui/index.tsx",
+      "import": "./dist/tui.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "prepack": "bun run build",
+    "typecheck": "bunx tsc --noEmit -p tsconfig.json",
+    "test": "bun test"
+  },
+  "engines": {
+    "opencode": ">=1.18.0"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "1.18.26",
+    "@opencode-ai/sdk": "1.18.26"
+  },
+  "devDependencies": {
+    "@opentui/core": "^0.5.10",
+    "@opentui/keymap": "^0.5.10",
+    "@opentui/solid": "^0.5.10",
+    "@types/bun": "latest",
+    "solid-js": "^1.9.12",
+    "typescript": "^5.8.2"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.5.10",
+    "@opentui/keymap": ">=0.5.10",
+    "@opentui/solid": ">=0.5.10",
+    "solid-js": ">=1.9.12"
+  },
+  "peerDependenciesMeta": {
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/keymap": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
+  },
+  "author": "Naveen (navbytes)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/navbytes/opencode-tree.git",
+    "directory": "packages/git-stats"
+  },
+  "homepage": "https://github.com/navbytes/opencode-tree/tree/main/packages/git-stats#readme",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "git",
+    "diff",
+    "github",
+    "pull-request",
+    "sidebar",
+    "tui"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
