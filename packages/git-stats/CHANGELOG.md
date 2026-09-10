@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.1 — unreleased
+
+- **Clicking a chip now opens the pull request.** It never did. The label was
+  rendered as an OSC 8 hyperlink and the escape sequence really was in the output —
+  but OpenCode's TUI holds any-event mouse tracking on (`?1000h ?1002h ?1003h
+  ?1006h`), so the terminal forwards every click to the application and never
+  activates the link. Under mouse tracking a hyperlink is reachable only with the
+  terminal's bypass modifier, which nobody is obliged to know about.
+
+  The click does reach the plugin, so the plugin now opens the URL itself: `open` on
+  macOS, `xdg-open` elsewhere, `cmd /c start "" <url>` on Windows — spawned with an
+  argv array, never a shell string, and only ever for an `http(s)` URL. The OSC 8
+  link stays for anyone who does modifier-click.
+
+  The `×` keeps its own separate handler, so dismissing a chip does not also open a
+  browser tab. Both were checked by sending real mouse clicks at the chip's
+  coordinates in a live terminal.
+
 ## 0.1.1-beta.1 — 2026-09-10
 
 **Nothing in the plugin changed.** `git diff git-stats-v0.1.0 git-stats-v0.1.1-beta.1
@@ -12,8 +30,8 @@ deployment environment only admitted tags matching `v*`, the scheme this repo us
 before it became a monorepo, so the publish job was rejected before its first step —
 with no failing step and no log to read. Fixed by allowing `*-v*` as well.
 
-Published under the `beta` dist-tag, so `latest` still resolves to 0.1.0. Deprecated
-on npm; install `opencode-git-stats@latest` instead.
+Published under the `beta` dist-tag, so `latest` still resolves to 0.1.0. Nobody
+should install this one — use `opencode-git-stats@latest`.
 
 ## 0.1.0 — 2026-09-10
 

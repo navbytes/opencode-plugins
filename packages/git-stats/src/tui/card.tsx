@@ -32,6 +32,7 @@ export type ChipRowProps = {
   chip: PrChip
   theme: TuiThemeCurrent
   onDismiss: (key: string) => void
+  onOpen: (url: string) => void
 }
 
 /**
@@ -41,6 +42,10 @@ export type ChipRowProps = {
 export function ChipRow(props: ChipRowProps): JSX.Element {
   const color = () => (props.chip.state === "unknown" ? undefined : PR_STATE_COLOR[props.chip.state])
   const label = () => `#${props.chip.number} ${PR_STATE_LABEL[props.chip.state]}`
+  // The OSC 8 link stays for terminals where the user knows the bypass modifier, but the
+  // click handler is what actually makes the chip openable: OpenCode holds mouse tracking
+  // on, so the terminal hands us the click instead of following the link.
+  const open = () => props.onOpen(props.chip.url)
   return (
     <box flexDirection="row" marginRight={1}>
       <Show
@@ -48,12 +53,12 @@ export function ChipRow(props: ChipRowProps): JSX.Element {
         fallback={
           // No state yet (gh is still answering, missing, or logged out): a plain badge,
           // so a chip never lies about which colour GitHub would paint it.
-          <text fg={props.theme.textMuted}>
+          <text fg={props.theme.textMuted} onMouseDown={open}>
             <Link href={props.chip.url} fg={props.theme.textMuted}>{` ${label()} `}</Link>
           </text>
         }
       >
-        <text bg={color()} fg="#ffffff">
+        <text bg={color()} fg="#ffffff" onMouseDown={open}>
           <Link href={props.chip.url} fg="#ffffff" bg={color()}>{` ${label()} `}</Link>
         </text>
       </Show>
@@ -75,6 +80,7 @@ export type CardProps = {
   /** Set when `gh` could not answer — shown once, under the chips, instead of silence. */
   note?: string
   onDismiss: (key: string) => void
+  onOpen: (url: string) => void
 }
 
 export function Card(props: CardProps): JSX.Element {
@@ -105,7 +111,7 @@ export function Card(props: CardProps): JSX.Element {
       </Show>
       <Show when={props.chips.length}>
         <box flexDirection="row" flexWrap="wrap">
-          <For each={props.chips}>{(chip) => <ChipRow chip={chip} theme={props.theme} onDismiss={props.onDismiss} />}</For>
+          <For each={props.chips}>{(chip) => <ChipRow chip={chip} theme={props.theme} onDismiss={props.onDismiss} onOpen={props.onOpen} />}</For>
         </box>
       </Show>
       <Show when={props.note}>
