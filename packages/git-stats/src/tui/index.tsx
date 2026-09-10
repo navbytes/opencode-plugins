@@ -10,7 +10,9 @@
  */
 import type { TuiPlugin } from "@opencode-ai/plugin/tui"
 import { createEffect, createMemo, createSignal } from "solid-js"
+import { execFile } from "node:child_process"
 import { fetchPrState, type GhFailure } from "../core/gh.js"
+import { openCommand } from "../core/open.js"
 import { DEFAULT_HOSTS, sortChips, type PrChip } from "../core/pr.js"
 import { summarize, type DiffSummary, type FileStat } from "../core/stats.js"
 import { applyFailure, applyLookup, collectChips, dueForRefresh, mapChips, markStale as staleChip, mergeChips, staleAfterTurn, visibleChips, type ToolCall } from "../core/tracker.js"
@@ -207,6 +209,21 @@ const tui: TuiPlugin = async (api, options) => {
     void fn().catch((e) => api.ui.toast({ variant: "error", message: e instanceof Error ? e.message : String(e) }))
   }
 
+  /**
+   * Clicking a chip opens the pull request. The label is also an OSC 8 hyperlink, but
+   * OpenCode holds any-event mouse tracking on, so the terminal hands us the click rather
+   * than following the link itself.
+   */
+  const openUrl = (url: string) => {
+    const cmd = openCommand(url)
+    if (!cmd) return
+    const child = execFile(cmd.command, cmd.args, { timeout: 10_000 }, (error) => {
+      if (error) api.ui.toast({ variant: "error", message: `could not open ${url}` })
+    })
+    // The browser outlives the plugin; nothing here should keep the TUI alive for it.
+    child.unref?.()
+  }
+
   const dismiss = (sessionID: string, key: string) => {
     const next = dismissedFor(sessionID)
     next.add(key)
@@ -292,6 +309,7 @@ const tui: TuiPlugin = async (api, options) => {
             // for why it could not is no longer true.
             note={shown().some((c) => c.state === "unknown") ? note() : undefined}
             onDismiss={(key) => dismiss(props.session_id, key)}
+            onOpen={openUrl}
           />
         )
       },

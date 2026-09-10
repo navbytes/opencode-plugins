@@ -30,9 +30,10 @@ Git Stats
 - **Close a chip** — click the `×` beside it, or run `/prs` to hide one, hide them
   all, or bring the hidden ones back. Dismissals are per session and survive a
   restart.
-- **Open the PR** — each chip is a terminal hyperlink, so clicking its label opens
-  the pull request in your browser (in terminals that support OSC 8; elsewhere the
-  chip is simply plain text).
+- **Open the PR** — click the chip's label and the pull request opens in your
+  browser. (The label is also an OSC 8 hyperlink, but OpenCode keeps mouse tracking
+  on, so the terminal hands the click to the plugin rather than following the link
+  itself — the plugin opens it.)
 
 ## Install
 
