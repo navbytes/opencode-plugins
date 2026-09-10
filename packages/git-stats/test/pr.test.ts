@@ -3,9 +3,9 @@ import { PR_STATE_COLOR, PR_STATE_LABEL, findPrRefs, isPrCreateCommand, prKey, s
 
 describe("findPrRefs", () => {
   test("picks the URL `gh pr create` prints", () => {
-    const refs = findPrRefs("https://github.com/navbytes/opencode-tree/pull/20\n")
+    const refs = findPrRefs("https://github.com/navbytes/opencode-plugins/pull/20\n")
     expect(refs).toHaveLength(1)
-    expect(refs[0]).toMatchObject({ host: "github.com", owner: "navbytes", repo: "opencode-tree", number: 20 })
+    expect(refs[0]).toMatchObject({ host: "github.com", owner: "navbytes", repo: "opencode-plugins", number: 20 })
   })
 
   test("finds PRs embedded in prose and markdown links", () => {

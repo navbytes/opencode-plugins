@@ -2,9 +2,9 @@ name: Publish to npm
 
 # Trusted publishing (OIDC): no npm token is stored anywhere. npm accepts the publish
 # because this repo + this workflow file are registered as the package's trusted publisher
-# (`npm trust github opencode-context-tree --file publish.yml --repo navbytes/opencode-tree`).
+# (`npm trust github opencode-context-tree --file publish.yml --repo navbytes/opencode-plugins`).
 # Registering a new package: `npm publish` its v0.x by hand once with a real token, then
-# `npm trust github <name> --file publish.yml --repo navbytes/opencode-tree`.
+# `npm trust github <name> --file publish.yml --repo navbytes/opencode-plugins`.
 on:
   release:
     types: [published]
