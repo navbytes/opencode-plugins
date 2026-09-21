@@ -1,0 +1,21 @@
+version: 2
+updates:
+- package-ecosystem: github-actions
+  directories:
+  - /
+  patterns:
+  - '*'
+  multi-ecosystem-group: routine
+- package-ecosystem: npm
+  directories:
+  - /
+  - /packages/context-tree
+  - /packages/git-stats
+  patterns:
+  - '*'
+  multi-ecosystem-group: routine
+multi-ecosystem-groups:
+  routine:
+    schedule:
+      interval: weekly
+      day: monday

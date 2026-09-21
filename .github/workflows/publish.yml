@@ -6,8 +6,6 @@ name: Publish to npm
 # Registering a new package: `npm publish` its v0.x by hand once with a real token, then
 # `npm trust github <name> --file publish.yml --repo navbytes/opencode-plugins`.
 on:
-  release:
-    types: [published]
   workflow_dispatch:     # dispatched on the new tag by release.yml, or run directly
     inputs:
       package:
@@ -22,18 +20,20 @@ permissions:
 
 jobs:
   publish:
+    if: startsWith(github.ref, 'refs/tags/context-tree-v') || startsWith(github.ref, 'refs/tags/git-stats-v')
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     environment: npm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # `prepack` runs `bun run build`, so Bun must be on PATH when npm packs.
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: latest
 
       # npm CLI >= 11.5.1 / Node >= 22.14 are required for OIDC trusted publishing.
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
@@ -68,11 +68,22 @@ jobs:
           package="${package:-context-tree}"
           echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' || { echo "ref '$GITHUB_REF_NAME' is not a version tag (package=$package, version=$version)" >&2; exit 1; }
           case "$version" in *-*) dist_tag=beta ;; *) dist_tag=latest ;; esac
-          cd "packages/$package" && npm version "$version" --no-git-tag-version --allow-same-version
+          case "$package" in context-tree|git-stats) ;; *) exit 1 ;; esac
+          test "$(jq -r .version "packages/$package/package.json")" = "$version"
           echo "package=$package" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
 
       # OIDC trusted publishing needs the package to already exist on npm: the very first
       # version of a new package is published once by hand, every later one lands here.
-      - run: cd "packages/${{ steps.meta.outputs.package }}" && npm publish --provenance --access public --tag "${{ steps.meta.outputs.dist_tag }}"
+      - name: Publish missing version
+        env:
+          PACKAGE: ${{ steps.meta.outputs.package }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          DIST_TAG: ${{ steps.meta.outputs.dist_tag }}
+        run: |
+          cd "packages/$PACKAGE"
+          name=$(node -p "require('./package.json').name")
+          if ! npm view "$name@$VERSION" version >/dev/null 2>&1; then
+            npm publish --provenance --access public --tag "$DIST_TAG"
+          fi
