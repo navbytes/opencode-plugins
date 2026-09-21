@@ -43,10 +43,7 @@ jobs:
       - run: bun run typecheck
       - run: bun test
 
-      # The tag is <package>-v<version>: derive both, stamp the version into that package's
-      # package.json in this checkout only. A prerelease (0.3.0-beta.1) goes under the `beta`
-      # dist-tag so `latest` keeps pointing at the last stable. Old-style bare `v*` tags (the
-      # transition case) have no `-v` in the middle and resolve to context-tree.
+      # The immutable tag must match the reviewed package version.
       - name: Determine package and version
         id: meta
         run: |
