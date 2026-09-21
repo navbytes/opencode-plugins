@@ -1,122 +1,50 @@
 name: Release
-
-# One click from the Actions tab. The tag is the source of truth for the version: this
-# workflow tags the current main, creates the GitHub Release, and dispatches the publish
-# workflow on that tag, which stamps package.json from the tag before `npm publish`.
-# Nothing is pushed to main, so the branch ruleset needs no bypass and no token exists.
-# (Releases created with GITHUB_TOKEN do not trigger other workflows; the dispatch is explicit.)
 on:
+  push:
+    branches: [main]
+    paths: ['packages/*/package.json']
   workflow_dispatch:
-    inputs:
-      package:
-        description: "Package to release"
-        type: choice
-        default: context-tree
-        options: [context-tree, git-stats]
-      bump:
-        description: "Version bump relative to the latest <package>-v* tag"
-        type: choice
-        default: patch
-        options: [patch, minor, major]
-      version:
-        description: "Exact version instead of a bump (e.g. 0.2.0), optional"
-        type: string
-        default: ""
-      dry_run:
-        description: "Compute and show the version; do not tag, release or publish"
-        type: boolean
-        default: false
-
 permissions:
-  contents: write   # push the tag, create the release
-  actions: write    # dispatch publish.yml
-
-concurrency: release-${{ inputs.package }}
-
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
 jobs:
   release:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      actions: write
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: main
           fetch-depth: 0
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun test
-
-      - name: Decide the version
-        id: v
-        run: |
-          set -euo pipefail
-          package="${{ inputs.package }}"
-          prefix="${package}-v"
-          # Without this, git's default version-sort ranks "1.2.3-beta.1" ABOVE the
-          # final "1.2.3" it precedes (it has no notion of "-beta" as a prerelease
-          # marker unless told), so a stable release would look older than its own
-          # betas forever. This tells it "-beta" sorts before the bare tag.
-          git config versionsort.suffix -beta
-          latest_tag="$(git tag --list "${prefix}*" --sort=-v:refname | head -1)"
-          latest="${latest_tag#$prefix}"
-          if [ -z "$latest" ] && [ "$package" = context-tree ]; then
-            # transition shim: context-tree's pre-monorepo history used bare v* tags
-            latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -1)"
-            latest="${latest_tag#v}"
-          fi
-          latest="${latest:-0.0.0}"
-          explicit="${{ inputs.version }}"
-          if [ -n "$explicit" ]; then
-            next="${explicit#v}"
-          else
-            # Bump off the released base, ignoring any prerelease suffix on $latest
-            # (e.g. "1.2.3-beta.1" bumps like "1.2.3" — plain `IFS=. read` would put
-            # "2-beta" in $patch and crash on `$((patch+1))`).
-            base="${latest%%-*}"
-            IFS=. read -r major minor patch <<< "$base"
-            case "${{ inputs.bump }}" in
-              major) next="$((major+1)).0.0" ;;
-              minor) next="$major.$((minor+1)).0" ;;
-              *)     next="$major.$minor.$((patch+1))" ;;
-            esac
-          fi
-          echo "$next" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' || { echo "not a semver version: $next" >&2; exit 1; }
-          git rev-parse -q --verify "refs/tags/${prefix}${next}" >/dev/null && { echo "tag ${prefix}${next} already exists" >&2; exit 1; }
-          if ! grep -q "^## ${next}" "packages/${package}/CHANGELOG.md"; then
-            echo "::warning::packages/${package}/CHANGELOG.md has no '## $next' section — add one on main before or after the release"
-          fi
-          echo "package=$package" >> "$GITHUB_OUTPUT"
-          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
-          echo "latest=$latest" >> "$GITHUB_OUTPUT"
-          echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
-          echo "next=$next" >> "$GITHUB_OUTPUT"
-          echo "Latest tag ${latest_tag:-none} → releasing ${prefix}${next} from $(git rev-parse --short HEAD)"
-
-      - name: Tag, release, publish
-        if: ${{ !inputs.dry_run }}
+      - name: Release merged package versions
         env:
+          BEFORE: ${{ github.event.before }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          package="${{ steps.v.outputs.package }}"
-          prefix="${{ steps.v.outputs.prefix }}"
-          v="${{ steps.v.outputs.next }}"
-          tag="${prefix}${v}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" -m "$tag"
-          git push origin "$tag"
-          prerelease=""; case "$v" in *-*) prerelease="--prerelease" ;; esac
-          notes_args=()
-          latest_tag="${{ steps.v.outputs.latest_tag }}"
-          [ -n "$latest_tag" ] && notes_args=(--notes-start-tag "$latest_tag")
-          gh release create "$tag" --title "$tag" --generate-notes "${notes_args[@]}" $prerelease
-          gh workflow run publish.yml --ref "$tag" -f package="$package"
-          echo "Released $tag; publish workflow dispatched on the tag."
-
-      - name: Dry run
-        if: ${{ inputs.dry_run }}
-        run: echo "Dry run — would tag ${{ steps.v.outputs.prefix }}${{ steps.v.outputs.next }} (latest ${{ steps.v.outputs.latest_tag || 'none' }}), create the release, and dispatch publish.yml."
+          for package in context-tree git-stats; do
+            version=$(jq -r .version "packages/$package/package.json")
+            [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]
+            if [ "$GITHUB_EVENT_NAME" = push ]; then
+              previous=$(git show "$BEFORE:packages/$package/package.json" | jq -r .version)
+              if [ "$previous" = "$version" ]; then continue; fi
+            fi
+            tag="$package-v$version"
+            if git show-ref --verify --quiet "refs/tags/$tag"; then
+              test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$GITHUB_SHA" || { echo 'Existing tag targets a different commit' >&2; exit 1; }
+            fi
+            gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name' > releases.txt
+            if ! grep -Fxq "$tag" releases.txt; then
+              grep -Fq "## $version" "packages/$package/CHANGELOG.md"
+              flags=(); case "$version" in *-*) flags=(--prerelease);; esac
+              gh release create "$tag" --target "$GITHUB_SHA" --title "$tag" --generate-notes "${flags[@]}"
+              gh workflow run publish.yml --ref "$tag" -f package="$package"
+            elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+              gh workflow run publish.yml --ref "$tag" -f package="$package"
+            fi
+          done
