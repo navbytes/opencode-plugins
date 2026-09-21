@@ -35,6 +35,9 @@ jobs:
               if [ "$previous" = "$version" ]; then continue; fi
             fi
             tag="$package-v$version"
+            if git show-ref --verify --quiet "refs/tags/$tag"; then
+              test "$(git rev-parse "refs/tags/$tag^{commit}")" = "$GITHUB_SHA" || { echo 'Existing tag targets a different commit' >&2; exit 1; }
+            fi
             gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name' > releases.txt
             if ! grep -Fxq "$tag" releases.txt; then
               grep -Fq "## $version" "packages/$package/CHANGELOG.md"
